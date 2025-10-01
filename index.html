@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>📒 英文錯題本 — 雲端 Drive 同步版</title>
+
+  <!-- PWA -->
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+
+  <!-- 字體 & Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Identity Services & gapi（加 onload 確保初始化） -->
+  <script src="https://accounts.google.com/gsi/client" async defer onload="gislkLoaded()"></script>
+  <script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
+
+  <style>
+    body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;background:#f8fafc}
+    .btn{padding:.6rem 1rem;border-radius:.6rem;font-weight:800}
+    .btn-primary{background:#2563eb;color:#fff}
+    .btn-ghost{background:#e5e7eb}
+    pre{white-space:pre-wrap;background:#0b1020;color:#d1e7ff;padding:12px;border-radius:10px}
+  </style>
+</head>
+<body class="min-h-screen">
+
+  <header class="sticky top-0 bg-white/80 backdrop-blur border-b">
+    <div class="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div>
+        <div id="auth-status" class="text-xs text-gray-500">🔗 離線模式（載入中…）</div>
+        <h1 class="text-xl font-extrabold text-gray-800">📒 英文錯題本 (Drive 雲端)</h1>
+      </div>
+      <div class="flex gap-2">
+        <button id="btn-login" class="btn btn-ghost text-sm">Google 登入</button>
+        <button id="btn-backup" class="btn btn-primary text-sm" disabled>💾 備份</button>
+        <button id="btn-restore" class="btn btn-ghost text-sm" disabled>🔄 還原</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-xl mx-auto px-4 py-4">
+    <p class="mb-3 text-gray-700">按「Google 登入」測試授權；成功後會嘗試列出 AppData 檔案。</p>
+    <pre id="log">初始化中…</pre>
+  </main>
+
+  <script>
+    // ✅ 使用你的 Client ID（你之前貼的）
+    const CLIENT_ID = "1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com";
+    const SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+
+    const $ = (s)=>document.querySelector(s);
+    const out = (...m)=>{ const el=$("#log"); el.textContent += (el.textContent ? "\n" : "") + m.join(" "); console.log(...m); };
+
+    let tokenClient = null;
+    let gapiReady = false;
+    let gisReady  = false;
+
+    function updateAuthStatus(){
+      const hasToken = !!gapi?.client?.getToken();
+      $("#auth-status").textContent = hasToken ? "✅ 已登入 Google" : "🔗 離線模式（請登入 Google）";
+      $("#btn-backup").disabled = !hasToken;
+      $("#btn-restore").disabled = !hasToken;
+    }
+
+    // gapi 載入後：初始化 client + Drive discovery
+    function gapiLoaded(){
+      gapi.load('client', async () => {
+        try{
+          await gapi.client.init({});
+          await gapi.client.load("https://www.googleapis.com/discovery/v1/apis/drive/v3/rest");
+          gapiReady = true;
+          out("gapi 已就緒");
+          updateAuthStatus();
+        }catch(e){
+          out("❌ gapi 初始化失敗：", e?.message || e);
+        }
+      });
+    }
+
+    // GIS 載入後：初始化 Token Client（關鍵：initTokenClient）
+    function gislkLoaded(){
+      try{
+        tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: SCOPE,
+          prompt: '',
+          callback: (resp) => {
+            if(resp.error){
+              out("❌ 登入失敗：", resp.error);
+              return;
+            }
+            // 設定 access_token 給 gapi，之後可呼叫 Drive
+            gapi.client.setToken({ access_token: resp.access_token });
+            out("🎉 取得 access_token");
+            updateAuthStatus();
+            listAppDataFiles();
+          }
+        });
+        gisReady = true;
+        out("GIS 已就緒");
+        updateAuthStatus();
+      }catch(e){
+        out("❌ GIS 初始化失敗：", e?.message || e);
+      }
+    }
+
+    // 觸發登入 / 取得 token
+    $("#btn-login").addEventListener("click", ()=>{
+      if(!gapiReady || !gisReady){
+        out("⏳ 服務初始化中，稍後再試");
+        return;
+      }
+      const hasToken = !!gapi.client.getToken();
+      if(hasToken){
+        // 登出（撤銷 token）
+        const tk = gapi.client.getToken();
+        google.accounts.oauth2.revoke(tk.access_token, ()=>{
+          gapi.client.setToken(null);
+          out("👋 已登出");
+          updateAuthStatus();
+        });
+      }else{
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      }
+    });
+
+    // 測試：列出 appDataFolder 檔案
+    async function listAppDataFiles(){
+      try{
+        const res = await gapi.client.drive.files.list({
+          spaces: 'appDataFolder',
+          fields: 'files(id,name,modifiedTime,size)',
+          pageSize: 10
+        });
+        out("📂 AppData 檔案：", JSON.stringify(res.result.files || [], null, 2));
+      }catch(e){
+        out("❌ 列檔失敗：", e?.message || e);
+      }
+    }
+
+    // 備份（把一小段假資料寫進 appDataFolder）
+    $("#btn-backup").addEventListener("click", async ()=>{
+      const fileMeta = { name: 'english-mistakes.json', parents: ['appDataFolder'], mimeType: 'application/json' };
+      const content = JSON.stringify([{ demo:true, ts: Date.now() }], null, 2);
+
+      const boundary = 'x-demo-boundary';
+      const body =
+        `--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+        JSON.stringify(fileMeta) + `\r\n` +
+        `--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+        content + `\r\n--${boundary}--`;
+
+      try{
+        await gapi.client.request({
+          path: '/upload/drive/v3/files?uploadType=multipart',
+          method: 'POST',
+          headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+          body
+        });
+        out("✅ 已備份一筆示範資料到 AppData");
+        listAppDataFiles();
+      }catch(e){
+        out("❌ 備份失敗：", e?.message || e);
+      }
+    });
+
+    // 還原（讀取剛才的示範檔）
+    $("#btn-restore").addEventListener("click", async ()=>{
+      try{
+        const list = await gapi.client.drive.files.list({ spaces:'appDataFolder', fields:'files(id,name)', q:"name='english-mistakes.json' and trashed=false", pageSize:1 });
+        if(!list.result.files?.length){ out("（找不到示範檔）"); return; }
+        const id = list.result.files[0].id;
+        const file = await gapi.client.drive.files.get({ fileId:id, alt:'media' });
+        out("🔄 讀到內容：", JSON.stringify(file.result, null, 2));
+      }catch(e){
+        out("❌ 還原失敗：", e?.message || e);
+      }
+    });
+
+    // 註冊 Service Worker（PWA）
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', ()=>{
+        navigator.serviceWorker.register('sw.js').catch(()=> out("⚠️ Service Worker 註冊失敗"));
+      });
+    }
+  </script>
+</body>
+</html>
