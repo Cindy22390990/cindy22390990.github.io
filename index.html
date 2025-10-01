@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>📒 英文錯題本 — Drive 雲端</title>
+
+<!-- PWA -->
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<!-- 字體 & Tailwind -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Google OAuth & GAPI -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
+
+<style>
+  :root{
+    --top-safe: env(safe-area-inset-top, 0px);
+    --bottom-safe: env(safe-area-inset-bottom, 0px);
+  }
+  html,body{height:100%}
+  body{font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif; background:#f8fafc;}
+  .card-shadow{box-shadow:0 10px 15px -3px rgba(0,0,0,.08), 0 4px 6px -4px rgba(0,0,0,.06);}
+  .btn{padding:.625rem .85rem;border-radius:.65rem;font-weight:800;transition:.08s transform;line-height:1}
+  .btn:active{transform:scale(.98)}
+  .btn-primary{background:#2563eb;color:#fff}
+  .btn-ghost{background:#eef2f7;color:#0f172a}
+  .btn-danger{background:#fee2e2;color:#991b1b}
+  .tap{-webkit-tap-highlight-color:transparent}
+  .pill{font-size:12px;padding:.125rem .5rem;border-radius:9999px}
+  /* 讓 header 在 iPhone 15 Pro Max 不會被動態島/瀏海擋住 */
+  header.header-safe{padding-top:calc(var(--top-safe) + 10px)}
+  /* 讓底部浮層與 + 按鈕不會被 Home bar 擋住 */
+  .safe-bottom{padding-bottom:calc(var(--bottom-safe) + 14px)}
+  .fab{bottom:calc(var(--bottom-safe) + 18px);right:14px}
+  /* Loading 遮罩 */
+  #loading.show{display:flex}
+  /* 讓 quiz 選項漂亮可按 */
+  .mc-option{border:2px solid #e5e7eb;border-radius:.75rem;padding:.8rem .9rem;font-weight:800}
+  .mc-option[data-choice]{display:flex;align-items:center;gap:.55rem}
+  .mc-option .badge{font-weight:900;font-size:.95rem;min-width:1.75rem;text-align:center}
+  .mc-option.correct{border-color:#86efac;background:#ecfdf5}
+  .mc-option.wrong{border-color:#fecaca;background:#fff1f2}
+  .mc-option.disabled{pointer-events:none;opacity:.6}
+  .heart{color:#ef4444}
+  /* 讓頁面頂部大按鈕更好點到：行高 + 換行 */
+  .top-btns{row-gap:.5rem}
+  @media (min-width:480px){
+    .top-btns{column-gap:.5rem}
+  }
+</style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- Header -->
+<header class="header-safe sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-gray-200">
+  <div class="max-w-xl mx-auto px-4 pb-2">
+    <div class="flex items-start justify-between">
+      <div class="pt-1">
+        <div class="text-xs text-gray-400">ENG Error Notebook</div>
+        <h1 class="text-xl font-extrabold text-gray-800">📒 英文錯題本（Drive 雲端）</h1>
+        <div id="drive-status" class="text-xs text-gray-500 mt-1">（離線模式）</div>
+      </div>
+      <!-- 右上角大按鈕：兩排以免太靠近動態島 -->
+      <div class="grid grid-cols-2 gap-x-2 top-btns">
+        <button id="btn-google-auth" class="btn btn-primary tap">Google<br>登入</button>
+        <button id="btn-drive-backup" class="btn btn-ghost tap">💾<br>備份</button>
+        <button id="btn-drive-restore" class="btn btn-ghost tap">🔄<br>還原</button>
+        <button id="btn-export" class="btn btn-ghost tap">匯出<br>(檔案)</button>
+      </div>
+    </div>
+    <div class="pt-2">
+      <label class="btn btn-ghost tap cursor-pointer">
+        匯入 (檔案)
+        <input id="file-import" type="file" accept=".json" class="hidden">
+      </label>
+    </div>
+  </div>
+</header>
+
+<!-- Tabs -->
+<nav class="sticky top-[118px] z-20 bg-white/90 backdrop-blur border-b border-gray-200">
+  <div class="max-w-xl mx-auto px-2 py-2 grid grid-cols-3 gap-2">
+    <button data-cat="Grammar" class="tab btn btn-ghost tap">📝 文法 <span class="count text-gray-400"></span></button>
+    <button data-cat="Collocations" class="tab btn btn-ghost tap">🔗 片語 <span class="count text-gray-400"></span></button>
+    <button data-cat="Vocabulary" class="tab btn btn-ghost tap">💡 單字 <span class="count text-gray-400"></span></button>
+  </div>
+</nav>
+
+<!-- 搜尋 & 模式 -->
+<section class="bg-white">
+  <div class="max-w-xl mx-auto px-4 py-3 flex items-center gap-2">
+    <div class="flex-1 relative">
+      <input id="search" type="search" placeholder="搜尋題幹/標籤（ex: 介系詞 / schedule）" class="w-full rounded-lg border border-gray-300 px-3 py-2 pl-9 focus:ring-2 focus:ring-blue-500 outline-none">
+      <div class="absolute left-2 top-2.5 text-gray-400">🔎</div>
+    </div>
+    <button id="mode-list" class="btn btn-ghost tap" data-mode="list">📋 快速翻</button>
+    <button id="mode-quiz" class="btn btn-ghost tap" data-mode="quiz">❓ 測驗</button>
+  </div>
+</section>
+
+<!-- 常錯統計 -->
+<section class="bg-white border-y">
+  <div class="max-w-xl mx-auto px-4 py-2 text-sm text-gray-700 flex items-center gap-2">
+    <div>📈 常錯統計：</div>
+    <div id="stat-grammar" class="pill bg-red-50 text-red-700">文法 0</div>
+    <div id="stat-coll" class="pill bg-orange-50 text-orange-700">片語 0</div>
+    <div id="stat-vocab" class="pill bg-indigo-50 text-indigo-700">單字 0</div>
+  </div>
+</section>
+
+<!-- 主內容 -->
+<main class="flex-1">
+  <div class="max-w-xl mx-auto px-4 py-4 space-y-3" id="cards"></div>
+  <div id="empty" class="hidden max-w-xl mx-auto px-4 py-16 text-center text-gray-500">
+    目前沒有資料，點右下角 <b>＋</b> 新增第一張卡片吧！
+  </div>
+</main>
+
+<!-- 浮動 + -->
+<button id="btn-add" class="btn btn-primary shadow-xl rounded-full w-14 h-14 text-3xl leading-none fixed fab tap">＋</button>
+
+<!-- 表單 Bottom Sheet -->
+<div id="sheet" class="fixed inset-0 bg-black/40 hidden items-end z-50">
+  <div class="w-full max-w-xl mx-auto bg-white rounded-t-2xl card-shadow p-4 safe-bottom">
+    <div class="flex items-center justify-between mb-2">
+      <h2 id="sheet-title" class="text-lg font-bold">新增錯題</h2>
+      <button id="sheet-close" class="btn btn-ghost tap">關閉</button>
+    </div>
+    <form id="form" class="space-y-3">
+      <input type="hidden" id="form-id">
+      <div>
+        <label class="text-sm text-gray-700">分類</label>
+        <select id="form-category" required class="w-full border rounded-lg px-3 py-2">
+          <option value="Grammar">文法 (Grammar)</option>
+          <option value="Collocations">片語 &amp; 固定搭配 (Collocations)</option>
+          <option value="Vocabulary">單字 (Vocabulary)</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">題幹（可含選項文字）</label>
+        <textarea id="form-question" required rows="2" class="w-full border rounded-lg px-3 py-2" placeholder="e.g. Visitors will see the monument ___ the building."></textarea>
+      </div>
+
+      <!-- 新版：可填四個選項；若空白，會退回舊式『錯誤/正解』雙欄 -->
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="text-sm text-gray-700">選項 A</label><input id="form-A" class="w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-sm text-gray-700">選項 B</label><input id="form-B" class="w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-sm text-gray-700">選項 C</label><input id="form-C" class="w-full border rounded-lg px-3 py-2"></div>
+        <div><label class="text-sm text-gray-700">選項 D</label><input id="form-D" class="w-full border rounded-lg px-3 py-2"></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-sm text-gray-700">❌ 錯誤答案（舊版欄位）</label>
+          <input id="form-wrong" class="w-full border rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="text-sm text-gray-700">✅ 正解（或填 A/B/C/D ）</label>
+          <input id="form-correct" class="w-full border rounded-lg px-3 py-2" placeholder="ex: throughout 或 A">
+        </div>
+      </div>
+
+      <div>
+        <label class="text-sm text-gray-700">🔎 錯因分析</label>
+        <textarea id="form-analysis" rows="2" class="w-full border rounded-lg px-3 py-2" placeholder="為何會錯？"></textarea>
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">🎯 記憶口訣/小技巧</label>
+        <textarea id="form-mnemonic" rows="2" class="w-full border rounded-lg px-3 py-2" placeholder="小技巧/口訣"></textarea>
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">標籤（逗號分隔）</label>
+        <input id="form-tags" class="w-full border rounded-lg px-3 py-2" placeholder="介系詞, TOEIC, Part5">
+      </div>
+      <div class="flex items-center justify-between pt-2">
+        <button type="button" id="btn-delete" class="hidden text-red-600 tap">刪除</button>
+        <button type="submit" class="btn btn-primary tap">儲存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-24 z-50 hidden">
+  <div class="bg-gray-900 text-white text-sm px-3 py-2 rounded-full shadow-lg">已儲存</div>
+</div>
+
+<!-- Loading -->
+<div id="loading" class="fixed inset-0 bg-white/80 hidden items-center justify-center z-[100]">
+  <div class="text-center">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
+    <p class="text-gray-700">同步中...</p>
+  </div>
+</div>
+
+<script>
+/* ----------------- PWA SW ----------------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+/* -------------- App 狀態/工具 -------------- */
+const $=s=>document.querySelector(s);
+const $$=s=>Array.from(document.querySelectorAll(s));
+const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+
+const state={cat:'Grammar',mode:'list',data:[],filtered:[]};
+const LS_KEY='eng_error_cards_v4';
+const LS_LAST_BACKUP='eng_drive_last_backup';
+const CLIENT_ID='1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com';
+const SCOPE='https://www.googleapis.com/auth/drive.appdata';
+const DRIVE_FILE_NAME='english-mistakes.json';
+
+let gapiInited=false, gisInited=false, tokenClient=null, driveFileId=null;
+
+/* -------------- Local Storage -------------- */
+function loadLocal(){
+  try{state.data=JSON.parse(localStorage.getItem(LS_KEY)||'[]')}catch{state.data=[]}
+  // 標準化
+  state.data = state.data.map(d=>({
+    ...d,
+    tags: Array.isArray(d.tags)? d.tags : String(d.tags||'').split(',').map(s=>s.trim()).filter(Boolean),
+    createdAt: d.createdAt || Date.now(),
+    failCount: d.failCount || 0,
+    heart: d.heart || 0,
+    // 若舊資料沒有 choices，沿用正解/錯誤答案生成一組
+    choices: Array.isArray(d.choices) ? d.choices :
+      ((d.correctAnswer||d.wrongAnswer)? genChoicesFromLegacy(d):[])
+  })).sort((a,b)=>(b.createdAt)-(a.createdAt));
+}
+function saveLocal(){ localStorage.setItem(LS_KEY, JSON.stringify(state.data)) }
+
+/* -------------- 常錯統計 -------------- */
+function updateStats(){
+  const sum=(cat)=>state.data.filter(x=>x.category===cat).reduce((a,b)=>a+(b.failCount||0),0);
+  $('#stat-grammar').textContent='文法 '+sum('Grammar');
+  $('#stat-coll').textContent='片語 '+sum('Collocations');
+  $('#stat-vocab').textContent='單字 '+sum('Vocabulary');
+}
+
+/* -------------- 篩選/渲染 -------------- */
+function setCategory(c){state.cat=c; render()}
+function setMode(m){
+  state.mode=m;
+  $('#mode-list').classList.toggle('btn-primary', m==='list');
+  $('#mode-list').classList.toggle('btn-ghost', m!=='list');
+  $('#mode-quiz').classList.toggle('btn-primary', m==='quiz');
+  $('#mode-quiz').classList.toggle('btn-ghost', m!=='quiz');
+  render();
+}
+function computeFiltered(){
+  const q=$('#search').value.trim().toLowerCase();
+  state.filtered = state.data.filter(d=>d.category===state.cat).filter(d=>{
+    if(!q) return true;
+    const blob=[d.question,(d.choices||[]).join(' '),d.wrongAnswer,d.correctAnswer,d.analysis,d.mnemonic,(d.tags||[]).join(',')].join(' ').toLowerCase();
+    return blob.includes(q);
+  });
+  // 快速翻依建立時間、新→舊；測驗依錯誤次數、由高到低
+  if(state.mode==='quiz') state.filtered.sort((a,b)=>(b.failCount||0)-(a.failCount||0));
+  else state.filtered.sort((a,b)=>(b.createdAt)-(a.createdAt));
+}
+
+function escapeHTML(s){return (s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]))}
+
+function cardEl(it){
+  const el=document.createElement('div');
+  el.className='bg-white rounded-xl border border-gray-100 card-shadow p-4';
+
+  const categoryMap={'Grammar':'📝 文法','Collocations':'🔗 片語','Vocabulary':'💡 單字'};
+  const created = new Date(it.createdAt||Date.now()).toLocaleDateString('zh-TW');
+  const tagsHTML=(it.tags||[]).map(t=>`<span class="pill bg-gray-100 text-gray-600">#${escapeHTML(t)}</span>`).join('');
+
+  // 內容
+  el.innerHTML=`
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-sm text-blue-600 font-semibold">${categoryMap[it.category]||'📄'}</div>
+      <div class="text-xs text-gray-400">${created}
+        <span class="ml-2 pill bg-red-100 text-red-600 font-bold">錯 ${it.failCount||0}</span>
+        <span class="ml-1 pill bg-pink-100 text-pink-600 font-bold">❤ ${it.heart||0}</span>
+      </div>
+    </div>
+    <h3 class="font-bold text-gray-900 mb-2">${escapeHTML(it.question||'')}</h3>
+    <div class="flex flex-wrap gap-1 mb-2">${tagsHTML}</div>
+
+    <div class="js-answer hidden">
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <div class="p-2 bg-red-50 border border-red-200 rounded-lg"><b class="text-red-600">❌</b> ${escapeHTML(it.wrongAnswer||'—')}</div>
+        <div class="p-2 bg-green-50 border border-green-200 rounded-lg"><b class="text-green-600">✅</b> ${escapeHTML(it.correctAnswer||'—')}</div>
+      </div>
+      <div class="mt-2 p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg text-sm">
+        <div class="font-semibold text-yellow-800 mb-1">🔎 錯因分析</div>
+        <div class="text-gray-800">${escapeHTML(it.analysis||'—')}</div>
+      </div>
+      <div class="mt-2 p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-lg text-sm">
+        <div class="font-semibold text-indigo-800 mb-1">🎯 記憶口訣/小技巧</div>
+        <div class="text-gray-800">${escapeHTML(it.mnemonic||'—')}</div>
+      </div>
+    </div>
+
+    <div class="mt-3 js-quiz"></div>
+
+    <div class="flex justify-end gap-2 mt-3 border-t pt-3 border-gray-100">
+      <button class="btn btn-ghost text-sm js-edit tap">編輯</button>
+      <button class="btn btn-ghost text-sm text-red-600 js-del tap">刪除</button>
+      <button class="btn btn-ghost text-sm ${it.isReviewed?'text-green-700 bg-green-100':'text-gray-700 bg-gray-100'} js-review tap">${it.isReviewed?'✅ 已複習':'🔄 標記已複習'}</button>
+      <button class="btn btn-primary text-sm js-show tap">顯示答案</button>
+    </div>`;
+
+  // 按鈕事件
+  el.querySelector('.js-edit').onclick=()=>openSheet(it);
+  el.querySelector('.js-del').onclick=()=>delItem(it.id);
+  el.querySelector('.js-review').onclick=()=>markReviewed(it.id, !it.isReviewed);
+  el.querySelector('.js-show').onclick=()=>{
+    el.querySelector('.js-answer').classList.remove('hidden');
+  };
+
+  // 測驗模式：ABCD 即時判斷
+  const quizHost = el.querySelector('.js-quiz');
+  if(state.mode==='quiz'){
+    buildQuizUI(quizHost, it, (result)=>{
+      if(result==='correct'){
+        it.heart = (it.heart||0) + 1;
+        if(it.failCount>0) it.failCount -= 1;
+        toast('❤ +1 做得好！');
+      }else{
+        it.failCount = (it.failCount||0) + 1;
+        toast('加油！已記錄到常錯統計', true);
+      }
+      saveLocal(); updateStats(); render();
+    });
+  }
+  return el;
+}
+
+function render(){
+  renderTabs(); computeFiltered(); updateStats();
+  const host=$('#cards'); host.innerHTML='';
+  if(state.filtered.length===0){ $('#empty').classList.remove('hidden') }
+  else { $('#empty').classList.add('hidden'); state.filtered.forEach(it=>host.appendChild(cardEl(it))) }
+}
+
+function renderTabs(){
+  $$('.tab').forEach(btn=>{
+    const cat=btn.dataset.cat;
+    const count=state.data.filter(d=>d.category===cat).length;
+    btn.querySelector('.count').textContent=count?`(${count})`:'';
+    const active = state.cat===cat;
+    btn.classList.toggle('btn-primary', active);
+    btn.classList.toggle('btn-ghost', !active);
+    btn.classList.toggle('text-white', active);
+  });
+}
+
+/* -------------- 建立測驗選項 UI -------------- */
+function buildQuizUI(host, item, onDone){
+  const choices = normalizedChoices(item);
+  if(choices.length!==4){  // 沒有選項就用一般顯示答案按鈕
+    host.innerHTML = `<div class="text-sm text-gray-500">此題未設定 ABCD 選項；可改用「顯示答案」檢視。</div>`;
+    return;
+  }
+  const letters=['A','B','C','D'];
+  host.innerHTML='';
+  choices.forEach((text,idx)=>{
+    const div=document.createElement('button');
+    div.className='mc-option w-full text-left tap';
+    div.dataset.choice=letters[idx];
+    div.innerHTML = `<span class="badge pill bg-gray-100 text-gray-800">${letters[idx]}</span> <span>${escapeHTML(text)}</span>`;
+    div.onclick=()=>{
+      // 鎖住
+      host.querySelectorAll('.mc-option').forEach(b=>b.classList.add('disabled'));
+      const ans = canonicalAnswer(item);
+      const chosen = letters[idx];
+      if(chosen===ans){
+        div.classList.add('correct');
+        onDone && onDone('correct');
+      }else{
+        div.classList.add('wrong');
+        // 正確項上綠
+        const rightIdx = letters.indexOf(ans);
+        if(rightIdx>=0){
+          host.querySelectorAll('.mc-option')[rightIdx].classList.add('correct');
+        }
+        onDone && onDone('wrong');
+      }
+      // 同時展開解析
+      const ansBox = host.parentElement.querySelector('.js-answer');
+      ansBox && ansBox.classList.remove('hidden');
+    };
+    host.appendChild(div);
+  });
+}
+
+/* -------------- 選項正規化 -------------- */
+function genChoicesFromLegacy(d){
+  const pool = [];
+  if(d.correctAnswer) pool.push(d.correctAnswer);
+  if(d.wrongAnswer)   pool.push(d.wrongAnswer);
+  // 補齊到四個（用常見干擾詞）
+  const fillers = ['in','at','on','for','by','with','from','throughout'];
+  while(pool.length<4){
+    const f = fillers[(Math.random()*fillers.length)|0];
+    if(!pool.includes(f)) pool.push(f);
+  }
+  // 打亂
+  for(let i=pool.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[pool[i],pool[j]]=[pool[j],pool[i]]}
+  return pool.slice(0,4);
+}
+function normalizedChoices(d){
+  const c = (d.choices && d.choices.length) ? d.choices : genChoicesFromLegacy(d);
+  return c.slice(0,4);
+}
+function canonicalAnswer(d){
+  const ans = (d.correctAnswer||'').trim();
+  const letters=['A','B','C','D'];
+  // 若正解填 A/B/C/D → 直接用
+  if(letters.includes(ans.toUpperCase())) return ans.toUpperCase();
+  // 否則比對文字，找出所在索引
+  const idx = normalizedChoices(d).findIndex(t=>String(t).trim().toLowerCase()===ans.toLowerCase());
+  return idx>=0 ? letters[idx] : 'A';
+}
+
+/* -------------- 表單/資料 CRUD -------------- */
+function openSheet(it=null){
+  $('#sheet').classList.remove('hidden');
+  $('#sheet-title').textContent = it?'編輯錯題':'新增錯題';
+  $('#btn-delete').classList.toggle('hidden', !it);
+
+  $('#form-id').value = it?.id || '';
+  $('#form-category').value = it?.category || state.cat;
+  $('#form-question').value = it?.question || '';
+  $('#form-wrong').value = it?.wrongAnswer || '';
+  $('#form-correct').value = it?.correctAnswer || '';
+  $('#form-analysis').value = it?.analysis || '';
+  $('#form-mnemonic').value = it?.mnemonic || '';
+  $('#form-tags').value = (it?.tags||[]).join(', ');
+  // ABCD（若存在 choices 則回填）
+  const ch = it?.choices || [];
+  $('#form-A').value = ch[0]||'';
+  $('#form-B').value = ch[1]||'';
+  $('#form-C').value = ch[2]||'';
+  $('#form-D').value = ch[3]||'';
+}
+function closeSheet(){ $('#sheet').classList.add('hidden') }
+
+function upsertLocal(obj){
+  const idx=state.data.findIndex(d=>d.id===obj.id);
+  if(idx>=0) state.data[idx]=obj; else state.data.unshift(obj);
+  saveLocal(); render(); toast('已儲存');
+}
+function delItem(id){
+  if(!confirm('確定刪除這張卡片？')) return;
+  const idx=state.data.findIndex(d=>d.id===id);
+  if(idx>=0){ state.data.splice(idx,1); saveLocal(); render(); toast('已刪除') }
+}
+function markReviewed(id,flag){
+  const it=state.data.find(d=>d.id===id); if(!it) return;
+  it.isReviewed=!!flag;
+  if(flag){ it.reviewCount=(it.reviewCount||0)+1; it.lastReviewed=Date.now() }
+  saveLocal(); render(); toast(flag?'✅ 已標記複習':'🔄 已取消複習');
+}
+
+function toast(msg='已儲存', isError=false){
+  const t=$('#toast'); const box=t.firstElementChild;
+  box.textContent=msg;
+  box.classList.toggle('bg-red-600', isError);
+  box.classList.toggle('bg-gray-900', !isError);
+  t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),1600);
+}
+
+/* -------------- 匯入/匯出 -------------- */
+function importJSON(arr){
+  if(!Array.isArray(arr)) return toast('匯入格式錯誤', true);
+  const key = o => (o.question||'') + '|' + (o.correctAnswer||'');
+  const map = new Map(state.data.map(o=>[key(o), o]));
+  arr.forEach(o=>{
+    o.id = o.id || uid();
+    o.tags = Array.isArray(o.tags)? o.tags : String(o.tags||'').split(',').map(s=>s.trim()).filter(Boolean);
+    if(!Array.isArray(o.choices) || o.choices.length!==4) o.choices = genChoicesFromLegacy(o);
+    o.createdAt = o.createdAt || Date.now();
+    o.failCount = o.failCount || 0;
+    o.heart = o.heart || 0;
+    map.set(key(o), o);
+  });
+  state.data = Array.from(map.values()).sort((a,b)=>(b.createdAt)-(a.createdAt));
+  saveLocal(); render(); toast('匯入完成');
+}
+
+/* -------------- Google Drive -------------- */
+function updateAuthStatus(){
+  const status=$('#drive-status');
+  const token = gapi.client?.getToken?.();
+  const lastBackup = localStorage.getItem(LS_LAST_BACKUP);
+  const lastTime = lastBackup? new Date(parseInt(lastBackup,10)).toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'}) : '無';
+
+  if(token){
+    status.innerHTML=`<span class="text-green-600">✅ 已登入 Google</span>｜上次備份：${lastTime}`;
+    $('#btn-drive-backup').disabled=false; $('#btn-drive-restore').disabled=false;
+  }else{
+    status.textContent='（離線模式）';
+    $('#btn-drive-backup').disabled=true; $('#btn-drive-restore').disabled=true;
+  }
+}
+function showLoading(b){ $('#loading').classList.toggle('show', !!b); }
+
+function gapiLoaded(){
+  gapi.load('client', async ()=>{
+    await gapi.client.init({});
+    await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
+    gapiInited=true; if(gisInited) updateAuthStatus();
+  });
+}
+function gisLoaded(){
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPE, prompt: '',
+    callback: (resp)=>{
+      if(resp.error){ toast('Google 登入失敗',true); return }
+      gapi.client.setToken(resp); updateAuthStatus();
+    }
+  });
+  gisInited=true; if(gapiInited) updateAuthStatus();
+}
+window.gapiLoaded=gapiLoaded; window.gislkLoaded=gisLoaded;
+
+async function authorize(){
+  if(!tokenClient){ toast('Google 服務未就緒',true); return }
+  tokenClient.requestAccessToken({prompt:'consent'});
+}
+function signOut(){
+  const token = gapi.client.getToken();
+  if(token){
+    google.accounts.oauth2.revoke(token.access_token, ()=>{ gapi.client.setToken(''); updateAuthStatus(); toast('已登出') });
+  }
+}
+
+async function findDriveFile(){
+  try{
+    const res = await gapi.client.drive.files.list({spaces:'appDataFolder', q:`name='${DRIVE_FILE_NAME}' and trashed=false`, fields:'files(id)'});
+    const files=res.result.files; driveFileId= files?.length? files[0].id:null;
+    return driveFileId;
+  }catch(e){ console.error(e); return null }
+}
+async function driveBackup(){
+  if(!gapi.client.getToken()){ toast('請先登入 Google',true); return }
+  showLoading(true);
+  try{
+    await findDriveFile();
+    const content = JSON.stringify(state.data,null,2);
+    const boundary='-------notebookBoundary';
+    const delimiter='\r\n--'+boundary+'\r\n';
+    const closeDelimiter='\r\n--'+boundary+'--';
+
+    const metadata = {name:DRIVE_FILE_NAME, mimeType:'application/json', parents:['appDataFolder']};
+    const body = delimiter + 'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+                 JSON.stringify(metadata) + delimiter + 'Content-Type: application/json\r\n\r\n' +
+                 content + closeDelimiter;
+
+    const path = driveFileId ? `/upload/drive/v3/files/${driveFileId}` : '/upload/drive/v3/files';
+    const method = driveFileId ? 'PATCH' : 'POST';
+
+    await gapi.client.request({
+      path: path + '?uploadType=multipart', method,
+      headers:{'Content-Type':'multipart/related; boundary="'+boundary+'"'},
+      body
+    });
+    localStorage.setItem(LS_LAST_BACKUP, Date.now());
+    updateAuthStatus(); toast('備份成功！');
+  }catch(e){
+    console.error(e);
+    toast('備份失敗：請到 GCP 啟用 Google Drive API，或稍後再試', true);
+  }finally{ showLoading(false) }
+}
+async function driveRestore(){
+  if(!gapi.client.getToken()){ toast('請先登入 Google',true); return }
+  showLoading(true);
+  try{
+    const fid = await findDriveFile();
+    if(!fid){ toast('雲端沒有備份檔案', true); return }
+    const res = await gapi.client.drive.files.get({fileId:fid, alt:'media'});
+    if(Array.isArray(res.result)){ state.data = []; saveLocal(); importJSON(res.result); toast('還原成功！') }
+    else{ toast('還原失敗：檔案內容格式錯誤',true) }
+  }catch(e){
+    console.error(e); toast('還原失敗：權限或網路錯誤', true);
+  }finally{ showLoading(false) }
+}
+
+/* -------------- Events -------------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  loadLocal(); setCategory('Grammar'); setMode('list'); updateStats();
+
+  $$('.tab').forEach(b=>b.onclick=()=>setCategory(b.dataset.cat));
+  $('#mode-list').onclick=()=>setMode('list');
+  $('#mode-quiz').onclick=()=>setMode('quiz');
+  $('#search').oninput=()=>render();
+
+  $('#btn-add').onclick=()=>openSheet();
+  $('#sheet-close').onclick=()=>closeSheet();
+
+  $('#form').onsubmit=(e)=>{
+    e.preventDefault();
+    const id = $('#form-id').value || uid();
+    const existed = state.data.find(d=>d.id===id);
+    const choices = [$('#form-A').value, $('#form-B').value, $('#form-C').value, $('#form-D').value].map(s=>s.trim()).filter(s=>s!=='');
+    const obj={
+      id,
+      category: $('#form-category').value,
+      question: $('#form-question').value.trim(),
+      wrongAnswer: $('#form-wrong').value.trim(),
+      correctAnswer: $('#form-correct').value.trim(),
+      analysis: $('#form-analysis').value.trim(),
+      mnemonic: $('#form-mnemonic').value.trim(),
+      tags: $('#form-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+      choices: choices.length===4? choices : undefined,
+      createdAt: existed?.createdAt || Date.now(),
+      isReviewed: existed?.isReviewed || false,
+      reviewCount: existed?.reviewCount || 0,
+      lastReviewed: existed?.lastReviewed || 0,
+      failCount: existed?.failCount || 0,
+      heart: existed?.heart || 0
+    };
+    upsertLocal(obj); closeSheet();
+  };
+  $('#btn-delete').onclick=()=>{
+    const id=$('#form-id').value; if(id){ closeSheet(); delItem(id) }
+  };
+
+  // Drive
+  $('#btn-google-auth').onclick=()=>{
+    if(gapi.client?.getToken?.()) signOut(); else authorize();
+  };
+  $('#btn-drive-backup').onclick=()=>driveBackup();
+  $('#btn-drive-restore').onclick=()=>driveRestore();
+
+  // 匯出
+  $('#btn-export').onclick=()=>{
+    const data=JSON.stringify(state.data,null,2);
+    const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+    const a=Object.assign(document.createElement('a'),{href:url,download:'english-mistakes-'+Date.now()+'.json'});
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),500);
+    toast('已匯出');
+  };
+  // 匯入
+  $('#file-import').onchange=(e)=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader(); r.onload=()=>{ try{ importJSON(JSON.parse(r.result)) }catch{ toast('匯入失敗',true) } };
+    r.readAsText(f); e.target.value='';
+  };
+
+  render(); updateAuthStatus();
+});
+
+/* -------------- 全域回呼（Google 腳本 onload） -------------- */
+window.addEventListener('load', ()=>{
+  // 有些瀏覽器 onload 才能抓到 gapi/google
+  if(typeof gapi!=='undefined') gapiLoaded();
+  if(typeof google!=='undefined') gisLoaded();
+});
+</script>
+</body>
+</html>
