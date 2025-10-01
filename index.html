@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>📒 英文錯題本 — Google Drive 雲端同步</title>
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html,body{height:100%}
+  body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;background:#f8fafc}
+  .safe-bottom{padding-bottom:max(env(safe-area-inset-bottom),1rem)}
+  .card-shadow{box-shadow:0 10px 15px -3px rgba(0,0,0,.08),0 4px 6px -4px rgba(0,0,0,.06)}
+  .tap{-webkit-tap-highlight-color:transparent}
+  .btn{padding:.5rem .75rem;border-radius:.5rem;font-weight:700;transition:.1s transform}
+  .btn:active{transform:scale(.98)}
+  .btn-primary{background:#2563eb;color:#fff}
+  .btn-ghost{background:#f1f5f9;color:#334155}
+  .pill{font-size:12px;padding:.125rem .5rem;border-radius:9999px}
+  .disabled{opacity:.5;pointer-events:none}
+  #sheet.show{display:flex;animation:fadeIn .2s}
+  #sheet>div{transform:translateY(0);transition:transform .2s ease-out}
+  #sheet:not(.show)>div{transform:translateY(100%)}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+</style>
+
+<!-- Google Identity & GAPI -->
+<script async defer src="https://accounts.google.com/gsi/client" onload="window.__gisReady=true; maybeInitCloud();"></script>
+<script async defer src="https://apis.google.com/js/api.js" onload="window.__gapiReady=true; maybeInitCloud();"></script>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<header class="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-gray-200">
+  <div class="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div>
+      <div class="text-xs text-gray-400">ENG Error Notebook</div>
+      <h1 class="text-xl font-extrabold text-gray-800">📒 英文錯題本</h1>
+      <div id="auth-status" class="text-xs text-gray-500 mt-1">（離線模式）</div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button id="btn-auth" class="btn btn-primary text-sm">Google 登入</button>
+      <button id="btn-backup" class="btn btn-primary text-sm disabled">備份</button>
+      <button id="btn-restore" class="btn btn-primary text-sm disabled">還原</button>
+    </div>
+  </div>
+  <div class="max-w-xl mx-auto px-4 py-2 border-t border-gray-100 flex items-center gap-2">
+    <button id="btn-export" class="btn btn-ghost text-sm">匯出 (檔案備份)</button>
+    <label class="btn btn-ghost text-sm cursor-pointer">
+      匯入 (檔案還原)<input id="file-import" type="file" accept=".json" class="hidden">
+    </label>
+  </div>
+</header>
+
+<nav class="sticky top-[112px] z-20 bg-white/90 backdrop-blur border-b border-gray-200">
+  <div class="max-w-xl mx-auto px-2 py-2 grid grid-cols-3 gap-2">
+    <button data-cat="Grammar" class="tab btn btn-ghost tap text-center">📝 文法 <span class="count text-gray-400"></span></button>
+    <button data-cat="Collocations" class="tab btn btn-ghost tap text-center">🔗 片語 <span class="count text-gray-400"></span></button>
+    <button data-cat="Vocabulary" class="tab btn btn-ghost tap text-center">💡 單字 <span class="count text-gray-400"></span></button>
+  </div>
+</nav>
+
+<section class="bg-white">
+  <div class="max-w-xl mx-auto px-4 py-3 flex items-center gap-2">
+    <div class="flex-1 relative">
+      <input id="search" type="search" placeholder="搜尋題幹/標籤（ex: 介系詞 / schedule）" class="w-full rounded-lg border border-gray-300 px-3 py-2 pl-9 focus:ring-2 focus:ring-blue-500 outline-none">
+      <div class="absolute left-2 top-2.5 text-gray-400">🔎</div>
+    </div>
+    <button id="mode-list" class="btn btn-ghost text-sm">📋 快速翻</button>
+    <button id="mode-quiz" class="btn btn-ghost text-sm">❓ 測驗</button>
+  </div>
+</section>
+
+<main class="flex-1">
+  <div class="max-w-xl mx-auto px-4 py-4 space-y-3" id="cards"></div>
+  <div id="empty" class="hidden max-w-xl mx-auto px-4 py-16 text-center text-gray-500">目前沒有資料，點右下角 <b>＋</b> 新增第一張卡片吧！</div>
+</main>
+
+<div class="fixed right-4 bottom-4 z-40">
+  <button id="btn-add" class="btn btn-primary shadow-xl rounded-full w-14 h-14 text-3xl leading-none tap">＋</button>
+</div>
+
+<!-- Sheet -->
+<div id="sheet" class="fixed inset-0 bg-black/40 hidden items-end z-50">
+  <div class="w-full max-w-xl mx-auto bg-white rounded-t-2xl card-shadow p-4 safe-bottom">
+    <div class="flex items-center justify-between mb-2">
+      <h2 id="sheet-title" class="text-lg font-bold">新增錯題</h2>
+      <button id="sheet-close" class="btn btn-ghost tap">關閉</button>
+    </div>
+    <form id="form" class="space-y-3">
+      <input type="hidden" id="form-id">
+      <div>
+        <label class="text-sm text-gray-700">分類</label>
+        <select id="form-category" class="w-full border rounded-lg px-3 py-2">
+          <option value="Grammar">文法 (Grammar)</option>
+          <option value="Collocations">片語 (Collocations)</option>
+          <option value="Vocabulary">單字 (Vocabulary)</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">題幹（簡短題目）</label>
+        <textarea id="form-question" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="text-sm text-gray-700">❌ 錯誤答案</label>
+          <input id="form-wrong" class="w-full border rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="text-sm text-gray-700">✅ 正解</label>
+          <input id="form-correct" class="w-full border rounded-lg px-3 py-2">
+        </div>
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">🔎 錯因分析</label>
+        <textarea id="form-analysis" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">🎯 記憶口訣/小技巧</label>
+        <textarea id="form-mnemonic" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+      </div>
+      <div>
+        <label class="text-sm text-gray-700">標籤（逗號分隔）</label>
+        <input id="form-tags" class="w-full border rounded-lg px-3 py-2">
+      </div>
+      <div class="flex items-center justify-between pt-2">
+        <button type="button" id="btn-delete" class="hidden text-red-600 tap">刪除</button>
+        <button class="btn btn-primary tap">儲存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Toast / Loading -->
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-24 z-50 hidden">
+  <div class="bg-gray-900 text-white text-sm px-3 py-2 rounded-full shadow-lg">已儲存</div>
+</div>
+<div id="loading" class="fixed inset-0 bg-white/80 hidden items-center justify-center z-[100]">
+  <div class="text-center">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
+    <p class="text-gray-700">同步中...</p>
+  </div>
+</div>
+
+<script>
+/* ---------- PWA SW（可有可無，不會卡畫面） ---------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+/* ---------- 小工具 ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+const LS_KEY = 'eng_error_cards_v3_local';
+
+function showToast(msg, isErr=false){
+  const t = $('#toast');
+  const box = t.firstElementChild;
+  box.textContent = msg;
+  box.classList.toggle('bg-red-600', isErr);
+  box.classList.toggle('bg-gray-900', !isErr);
+  t.classList.remove('hidden');
+  setTimeout(()=>t.classList.add('hidden'), 1600);
+}
+let loadingTimer=null;
+function showLoading(){
+  clearTimeout(loadingTimer);
+  $('#loading').classList.remove('hidden');
+  // 保險 15 秒自動關
+  loadingTimer = setTimeout(()=>$('#loading').classList.add('hidden'), 15000);
+}
+function hideLoading(){
+  clearTimeout(loadingTimer);
+  $('#loading').classList.add('hidden');
+}
+
+/* ---------- App 狀態 ---------- */
+const state = { cat:'Grammar', mode:'list', data:[], filtered:[] };
+
+function loadLocal(){
+  try { state.data = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }
+  catch { state.data = []; }
+  // 欄位預設
+  state.data = state.data.map(d=>({
+    ...d,
+    tags: Array.isArray(d.tags) ? d.tags : String(d.tags||'').split(',').map(s=>s.trim()).filter(Boolean),
+    failCount: d.failCount || 0,
+    createdAt: d.createdAt || Date.now()
+  }));
+}
+function saveLocal(){ localStorage.setItem(LS_KEY, JSON.stringify(state.data)); }
+
+function setCategory(cat){ state.cat=cat; render(); }
+function setMode(m){
+  state.mode=m;
+  $('#mode-list').classList.toggle('btn-primary', m==='list');
+  $('#mode-list').classList.toggle('btn-ghost', m!=='list');
+  $('#mode-quiz').classList.toggle('btn-primary', m==='quiz');
+  $('#mode-quiz').classList.toggle('btn-ghost', m!=='quiz');
+  render();
+}
+function escapeHTML(s){return (s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+
+function computeFiltered(){
+  const q = $('#search').value.trim().toLowerCase();
+  state.filtered = state.data
+    .filter(d=>d.category===state.cat)
+    .filter(d=>{
+      if(!q) return true;
+      const blob=[d.question,d.wrongAnswer,d.correctAnswer,d.analysis,d.mnemonic,(d.tags||[]).join(',')].join(' ').toLowerCase();
+      return blob.includes(q);
+    });
+  if(state.mode==='quiz'){
+    state.filtered.sort((a,b)=> (b.failCount||0)-(a.failCount||0));
+  }else{
+    state.filtered.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0)).reverse();
+  }
+}
+function cardEl(it){
+  const el=document.createElement('div');
+  el.className='bg-white rounded-xl border border-gray-100 card-shadow p-4 tap';
+  const categoryMap={'Grammar':'📝 文法','Collocations':'🔗 片語','Vocabulary':'💡 單字'};
+  el.innerHTML=`
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-sm text-blue-600 font-semibold">${categoryMap[it.category]||'📄'}</div>
+      <div class="text-xs text-gray-400">
+        ${new Date(it.createdAt).toLocaleDateString('zh-TW')}
+        <span class="ml-2 pill bg-red-100 text-red-600 font-bold">錯 ${it.failCount||0} 次</span>
+      </div>
+    </div>
+    <h3 class="font-bold text-gray-900 mb-2">${escapeHTML(it.question||'')}</h3>
+    <div class="flex flex-wrap gap-1 mb-2">${(it.tags||[]).map(t=>`<span class="pill bg-gray-100 text-gray-600">#${escapeHTML(t)}</span>`).join('')}</div>
+    <div class="js-answer ${state.mode==='quiz'?'hidden':''}">
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <div class="p-2 bg-red-50 border border-red-200 rounded-lg"><b class="text-red-600">❌</b> ${escapeHTML(it.wrongAnswer||'')}</div>
+        <div class="p-2 bg-green-50 border border-green-200 rounded-lg"><b class="text-green-600">✅</b> ${escapeHTML(it.correctAnswer||'')}</div>
+      </div>
+      <div class="mt-2 p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg text-sm">
+        <div class="font-semibold text-yellow-800 mb-1">🔎 錯因分析</div>
+        <div class="text-gray-800">${escapeHTML(it.analysis||'—')}</div>
+      </div>
+      <div class="mt-2 p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-lg text-sm">
+        <div class="font-semibold text-indigo-800 mb-1">🎯 記憶口訣/小技巧</div>
+        <div class="text-gray-800">${escapeHTML(it.mnemonic||'—')}</div>
+      </div>
+    </div>
+    ${state.mode==='quiz' ? `
+      <div class="flex gap-2 mt-3">
+        <button class="btn btn-primary flex-1 js-correct">我會了</button>
+        <button class="btn btn-ghost flex-1 text-red-600 js-wrong">答錯了</button>
+      </div>` : `
+      <button class="btn btn-primary w-full mt-3 js-show">顯示答案</button>`
+    }
+    <div class="flex justify-end gap-2 mt-3 border-t pt-3 border-gray-100">
+      <button class="btn btn-ghost text-sm js-edit">編輯</button>
+      <button class="btn btn-ghost text-sm text-red-600 js-del">刪除</button>
+      <button class="btn btn-ghost text-sm ${it.isReviewed?'text-green-700 bg-green-100':'text-gray-700 bg-gray-100'} js-review">
+        ${it.isReviewed?'✅ 已複習':'🔄 標記已複習'}
+      </button>
+    </div>`;
+  el.querySelector('.js-edit').onclick=()=>openSheet(it);
+  el.querySelector('.js-del').onclick=()=>delItem(it.id);
+  el.querySelector('.js-review').onclick=()=>markReviewed(it.id,!it.isReviewed);
+  el.querySelector('.js-show')?.addEventListener('click',(e)=>{el.querySelector('.js-answer').classList.remove('hidden'); e.target.remove();});
+  el.querySelector('.js-correct')?.addEventListener('click',()=>{
+    it.failCount=Math.max(0,(it.failCount||0)-1); saveLocal(); render(); showToast('錯誤次數 -1');
+  });
+  el.querySelector('.js-wrong')?.addEventListener('click',()=>{
+    it.failCount=(it.failCount||0)+1; saveLocal(); render(); showToast('錯誤次數 +1', true);
+  });
+  return el;
+}
+function render(){
+  renderTabs(); computeFiltered();
+  const host=$('#cards'); host.innerHTML='';
+  if(state.filtered.length===0){ $('#empty').classList.remove('hidden'); }
+  else{ $('#empty').classList.add('hidden'); state.filtered.forEach(it=>host.appendChild(cardEl(it))); }
+}
+function renderTabs(){
+  $$('.tab').forEach(btn=>{
+    const cat=btn.dataset.cat;
+    const count=state.data.filter(d=>d.category===cat).length;
+    btn.querySelector('.count').textContent=count?`(${count})`:'';
+    btn.classList.toggle('btn-primary', state.cat===cat);
+    btn.classList.toggle('btn-ghost', state.cat!==cat);
+    btn.classList.toggle('text-white', state.cat===cat);
+  });
+}
+
+/* ---------- Sheet CRUD ---------- */
+function openSheet(it=null){
+  $('#sheet').classList.remove('hidden');
+  // 強制觸發動畫
+  setTimeout(()=>$('#sheet').classList.add('show'),0);
+  $('#sheet-title').textContent=it?'編輯錯題':'新增錯題';
+  $('#btn-delete').classList.toggle('hidden', !it);
+  $('#form-id').value=it?.id||'';
+  $('#form-category').value=it?.category||state.cat;
+  $('#form-question').value=it?.question||'';
+  $('#form-wrong').value=it?.wrongAnswer||'';
+  $('#form-correct').value=it?.correctAnswer||'';
+  $('#form-analysis').value=it?.analysis||'';
+  $('#form-mnemonic').value=it?.mnemonic||'';
+  $('#form-tags').value=(it?.tags||[]).join(', ');
+}
+function closeSheet(){
+  const s=$('#sheet');
+  s.classList.remove('show');
+  setTimeout(()=>s.classList.add('hidden'),180);
+}
+$('#sheet-close').onclick=closeSheet;
+// 點背景也可關
+$('#sheet').addEventListener('click',(e)=>{ if(e.target.id==='sheet') closeSheet(); });
+
+$('#form').onsubmit=(e)=>{
+  e.preventDefault();
+  const id=$('#form-id').value || uid();
+  const existed=state.data.find(d=>d.id===id);
+  const obj={
+    id,
+    category:$('#form-category').value,
+    question:$('#form-question').value.trim(),
+    wrongAnswer:$('#form-wrong').value.trim(),
+    correctAnswer:$('#form-correct').value.trim(),
+    analysis:$('#form-analysis').value.trim(),
+    mnemonic:$('#form-mnemonic').value.trim(),
+    tags:$('#form-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+    createdAt: existed?.createdAt || Date.now(),
+    isReviewed: existed?.isReviewed || false,
+    reviewCount: existed?.reviewCount || 0,
+    lastReviewed: existed?.lastReviewed || 0,
+    failCount: existed?.failCount || 0
+  };
+  const idx=state.data.findIndex(d=>d.id===id);
+  if(idx>=0) state.data[idx]=obj; else state.data.unshift(obj);
+  saveLocal(); render(); showToast('已儲存'); closeSheet();
+};
+$('#btn-delete').onclick=()=>{
+  const id=$('#form-id').value; if(!id) return;
+  if(!confirm('確定刪除這張卡片？')) return;
+  delItem(id); closeSheet();
+};
+function delItem(id){ const i=state.data.findIndex(d=>d.id===id); if(i>=0){state.data.splice(i,1); saveLocal(); render(); showToast('已刪除');}}
+function markReviewed(id,flag){
+  const it=state.data.find(d=>d.id===id); if(!it) return;
+  it.isReviewed=!!flag; if(flag){it.reviewCount=(it.reviewCount||0)+1; it.lastReviewed=Date.now();}
+  saveLocal(); render();
+}
+
+/* ---------- 匯入/匯出（本地） ---------- */
+$('#btn-export').onclick=()=>{
+  const data=JSON.stringify(state.data,null,2);
+  const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+  const a=Object.assign(document.createElement('a'),{href:url,download:`english-mistakes-${Date.now()}.json`});
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),600);
+  showToast('匯出完成');
+};
+$('#file-import').onchange=(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{
+    const arr=JSON.parse(r.result);
+    if(!Array.isArray(arr)) throw new Error('格式錯誤');
+    const key=o=>(o.question||'')+'|'+(o.correctAnswer||'');
+    const map=new Map(state.data.map(o=>[key(o),o]));
+    arr.forEach(o=>{
+      o.id=o.id||uid();
+      o.tags=Array.isArray(o.tags)?o.tags:String(o.tags||'').split(',').map(s=>s.trim()).filter(Boolean);
+      o.createdAt=o.createdAt||Date.now();
+      o.failCount=o.failCount||0;
+      map.set(key(o),o);
+    });
+    state.data=[...map.values()];
+    saveLocal(); render(); showToast('匯入完成');
+  }catch{ showToast('匯入失敗', true); }};
+  r.readAsText(f); e.target.value='';
+};
+
+/* ---------- 事件：分類、模式、搜尋、＋ ---------- */
+$$('.tab').forEach(b=>b.onclick=()=>setCategory(b.dataset.cat));
+$('#mode-list').onclick=()=>setMode('list');
+$('#mode-quiz').onclick=()=>setMode('quiz');
+$('#search').oninput=()=>render();
+$('#btn-add').onclick=()=>openSheet();
+
+/* ---------- Google Drive 整合 ---------- */
+// 使用 Token Client（最穩定、無後端）
+const GOOGLE_CLIENT_ID = '1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com';
+const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+const DRIVE_FILE_NAME = 'english-mistakes.json';
+let tokenClient = null;
+let driveFileId = null;
+
+function maybeInitCloud(){
+  if(!window.__gisReady || !window.__gapiReady) return;
+  // 初始化 gapi（僅需 client.init + drive discovery）
+  gapi.load('client', async ()=>{
+    await gapi.client.init({});
+    await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
+    // 建立 token client
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_CLIENT_ID,
+      scope: SCOPE,
+      callback: async (resp)=>{
+        if(resp.error){ showToast('登入失敗：'+resp.error, true); return; }
+        gapi.client.setToken(resp);
+        updateAuthUI();
+        // 嘗試找檔
+        try{ await findDriveFile(); }catch{}
+      }
+    });
+    updateAuthUI();
+  });
+}
+function isAuthed(){ return !!gapi.client.getToken(); }
+function updateAuthUI(){
+  const authed = isAuthed();
+  $('#auth-status').textContent = authed ? '✅ 已登入 Google' : '（離線模式）';
+  $('#btn-backup').classList.toggle('disabled', !authed);
+  $('#btn-restore').classList.toggle('disabled', !authed);
+  $('#btn-auth').textContent = authed ? '登出' : 'Google 登入';
+}
+$('#btn-auth').onclick=()=>{
+  if(isAuthed()){
+    const t=gapi.client.getToken();
+    if(t?.access_token){
+      google.accounts.oauth2.revoke(t.access_token, ()=>{ gapi.client.setToken(''); updateAuthUI(); showToast('已登出');});
+    }else{ gapi.client.setToken(''); updateAuthUI(); }
+  }else{
+    tokenClient?.requestAccessToken({prompt:'consent'});
+  }
+};
+
+async function findDriveFile(){
+  try{
+    const res = await gapi.client.drive.files.list({
+      spaces:'appDataFolder',
+      q:`name='${DRIVE_FILE_NAME}' and trashed=false`,
+      fields:'files(id, name, modifiedTime)'
+    });
+    driveFileId = res.result.files?.[0]?.id || null;
+  }catch(e){ console.warn('list error', e); }
+}
+
+async function backupToDrive(){
+  if(!isAuthed()){ showToast('請先登入 Google', true); return; }
+  showLoading();
+  const content = JSON.stringify(state.data,null,2);
+  const meta = { name:DRIVE_FILE_NAME, mimeType:'application/json', parents:['appDataFolder'] };
+  const boundary = '-------eng-notebook-' + Math.random().toString(36).slice(2);
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`+
+    JSON.stringify(meta)+`\r\n`+
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n`+
+    content+`\r\n--${boundary}--`;
+
+  try{
+    if(!driveFileId){
+      const res = await gapi.client.request({
+        path:'/upload/drive/v3/files?uploadType=multipart',
+        method:'POST',
+        headers:{'Content-Type':'multipart/related; boundary='+boundary},
+        body
+      });
+      driveFileId = res.result.id;
+    }else{
+      await gapi.client.request({
+        path:'/upload/drive/v3/files/'+driveFileId+'?uploadType=multipart',
+        method:'PATCH',
+        headers:{'Content-Type':'multipart/related; boundary='+boundary},
+        body
+      });
+    }
+    showToast('備份成功！');
+  }catch(e){
+    console.error(e); showToast('備份失敗：'+(e?.result?.error?.message||'連線/權限'), true);
+  }finally{ hideLoading(); }
+}
+async function restoreFromDrive(){
+  if(!isAuthed()){ showToast('請先登入 Google', true); return; }
+  showLoading();
+  try{
+    if(!driveFileId) await findDriveFile();
+    if(!driveFileId){ showToast('找不到雲端備份，請先備份', true); return; }
+    const res = await gapi.client.drive.files.get({ fileId:driveFileId, alt:'media' });
+    const imported = res.result;
+    if(Array.isArray(imported)){
+      // 合併：以 question+correct 為 key
+      const key=o=>(o.question||'')+'|'+(o.correctAnswer||'');
+      const map=new Map(state.data.map(o=>[key(o),o]));
+      imported.forEach(o=>{
+        o.id=o.id||uid();
+        o.tags=Array.isArray(o.tags)?o.tags:String(o.tags||'').split(',').map(s=>s.trim()).filter(Boolean);
+        o.createdAt=o.createdAt||Date.now(); o.failCount=o.failCount||0;
+        map.set(key(o),o);
+      });
+      state.data=[...map.values()];
+      saveLocal(); render(); showToast('還原成功！');
+    }else{
+      showToast('雲端檔案內容格式錯誤', true);
+    }
+  }catch(e){
+    console.error(e); showToast('還原失敗：'+(e?.result?.error?.message||'連線/權限'), true);
+  }finally{ hideLoading(); }
+}
+$('#btn-backup').onclick=backupToDrive;
+$('#btn-restore').onclick=restoreFromDrive;
+
+/* ---------- 啟動 ---------- */
+loadLocal();
+setCategory('Grammar');
+setMode('list');
+render();
+updateAuthUI();
+</script>
+</body>
+</html>
