@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>📒 英文錯題本（Drive 雲端）</title>
+
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+
+  <!-- Fonts & Tailwind -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google APIs -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js" async defer></script>
+
+  <style>
+    html,body{height:100%}
+    body{font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;background:#f8fafc}
+    .card-shadow{box-shadow:0 10px 15px -3px rgba(0,0,0,.08),0 4px 6px -4px rgba(0,0,0,.06)}
+    .btn{padding:.5rem .75rem;border-radius:.5rem;font-weight:700;transition:.12s}
+    .btn:active{transform:scale(.98)}
+    .btn-primary{background:#2563eb;color:#fff}
+    .btn-ghost{background:#eef2f7;color:#334155}
+    .pill{font-size:12px;padding:.1rem .5rem;border-radius:999px}
+    .hidden-el{display:none}
+    .disable{opacity:.5;pointer-events:none}
+    #sheet.show{display:flex;animation:fade .2s}
+    #sheet:not(.show)>div{transform:translateY(100%)}
+    #sheet>div{transform:translateY(0);transition:.25s}
+    @keyframes fade{from{opacity:0}to{opacity:1}}
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b border-slate-200">
+    <div class="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div>
+        <div class="text-xs text-slate-400">ENG Error Notebook</div>
+        <h1 class="text-xl font-extrabold text-slate-800">📒 英文錯題本（Drive 雲端）</h1>
+        <div id="auth-status" class="text-xs text-slate-500 mt-1">🔗 離線模式（請登入 Google）</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="btn-google" class="btn btn-ghost text-sm">Google 登入</button>
+        <button id="btn-backup" class="btn btn-primary text-sm disable">💾 備份</button>
+        <button id="btn-restore" class="btn btn-ghost text-sm disable">🔄 還原</button>
+      </div>
+    </div>
+
+    <!-- Local import/export -->
+    <div class="max-w-xl mx-auto px-4 pb-2 flex items-center gap-2">
+      <button id="btn-export" class="btn btn-ghost text-sm">匯出（檔案備份）</button>
+      <label class="btn btn-ghost text-sm cursor-pointer">
+        匯入（檔案還原）
+        <input id="file-import" type="file" accept=".json" class="hidden"/>
+      </label>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="sticky top-[104px] z-20 bg-white/95 backdrop-blur border-y border-slate-200">
+    <div class="max-w-xl mx-auto px-2 py-2 grid grid-cols-3 gap-2">
+      <button data-cat="Grammar" class="tab btn btn-primary text-white">📝 文法 <span class="count text-white/80"></span></button>
+      <button data-cat="Collocations" class="tab btn btn-ghost">🔗 片語 <span class="count text-slate-500"></span></button>
+      <button data-cat="Vocabulary" class="tab btn btn-ghost">💡 單字 <span class="count text-slate-500"></span></button>
+    </div>
+  </nav>
+
+  <!-- Search & modes -->
+  <section class="bg-white">
+    <div class="max-w-xl mx-auto px-4 py-3 flex items-center gap-2">
+      <div class="flex-1 relative">
+        <input id="search" type="search" placeholder="搜尋題幹/標籤（ex: 介系詞 / schedule）" class="w-full rounded-lg border border-slate-300 px-3 py-2 pl-9 focus:ring-2 focus:ring-blue-500 outline-none">
+        <div class="absolute left-2 top-2.5 text-slate-400">🔎</div>
+      </div>
+      <button id="mode-list" type="button" class="btn btn-primary text-sm">📋 快速翻</button>
+      <button id="mode-quiz" type="button" class="btn btn-ghost text-sm">❓ 測驗</button>
+    </div>
+  </section>
+
+  <!-- List -->
+  <main class="flex-1">
+    <div id="cards" class="max-w-xl mx-auto px-4 py-4 space-y-3"></div>
+    <div id="empty" class="hidden-el max-w-xl mx-auto px-4 py-16 text-center text-slate-500">
+      目前沒有資料，點右下角 <b>＋</b> 新增第一張卡片吧！
+    </div>
+  </main>
+
+  <!-- Add FAB -->
+  <div class="fixed right-4 bottom-4 z-40">
+    <button id="btn-add" type="button" class="btn btn-primary shadow-xl rounded-full w-14 h-14 text-3xl leading-none">＋</button>
+  </div>
+
+  <!-- Sheet -->
+  <div id="sheet" class="fixed inset-0 bg-black/40 hidden-el items-end z-50">
+    <div class="w-full max-w-xl mx-auto bg-white rounded-t-2xl card-shadow p-4">
+      <div class="flex items-center justify-between mb-2">
+        <h2 id="sheet-title" class="text-lg font-bold">新增錯題</h2>
+        <button id="sheet-close" type="button" class="btn btn-ghost">關閉</button>
+      </div>
+      <form id="form" class="space-y-3">
+        <input type="hidden" id="form-id" />
+        <div>
+          <label class="text-sm text-slate-700">分類</label>
+          <select id="form-category" class="w-full border rounded-lg px-3 py-2">
+            <option value="Grammar">文法 (Grammar)</option>
+            <option value="Collocations">片語 &amp; 固定搭配 (Collocations)</option>
+            <option value="Vocabulary">單字 (Vocabulary)</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm text-slate-700">題幹（簡短題目）</label>
+          <textarea id="form-question" rows="2" class="w-full border rounded-lg px-3 py-2" placeholder="e.g. Visitors will see the monument ___ the building."></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="text-sm text-slate-700">❌ 錯誤答案</label>
+            <input id="form-wrong" class="w-full border rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="text-sm text-slate-700">✅ 正解</label>
+            <input id="form-correct" class="w-full border rounded-lg px-3 py-2" />
+          </div>
+        </div>
+        <div>
+          <label class="text-sm text-slate-700">🔎 錯因分析</label>
+          <textarea id="form-analysis" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div>
+          <label class="text-sm text-slate-700">🎯 記憶口訣/小技巧</label>
+          <textarea id="form-mnemonic" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div>
+          <label class="text-sm text-slate-700">標籤（逗號分隔）</label>
+          <input id="form-tags" class="w-full border rounded-lg px-3 py-2" placeholder="介系詞, TOEIC, Part5" />
+        </div>
+        <div class="flex items-center justify-between pt-2">
+          <button id="btn-delete" type="button" class="text-red-600 hidden-el">刪除</button>
+          <button type="submit" class="btn btn-primary">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-24 z-[60] hidden-el">
+    <div class="bg-slate-900 text-white text-sm px-3 py-2 rounded-full shadow-lg">已儲存</div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[70] hidden-el">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
+      <p class="text-slate-700">同步中…</p>
+    </div>
+  </div>
+
+  <!-- SW -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(()=>{});
+      });
+    }
+  </script>
+
+  <!-- App -->
+  <script>
+    /***** 基本狀態與工具 ******/
+    const $ = (s) => document.querySelector(s);
+    const $$ = (s) => Array.from(document.querySelectorAll(s));
+    const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+    const state = { cat:'Grammar', mode:'list', data:[], filtered:[] };
+    const LS_KEY = 'eng_error_cards_v3';
+    const DRIVE_FILE = 'english-mistakes.json';
+    const CLIENT_ID = 'YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com';
+    const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+
+    let tokenClient = null;
+    let driveFileId = null;
+
+    const toast=(msg)=>{ const t=$("#toast"); t.firstElementChild.textContent=msg; t.classList.remove("hidden-el"); setTimeout(()=>t.classList.add("hidden-el"),1400); };
+    const escapeHTML=(s)=> (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[m]));
+
+    /***** Local Storage ******/
+    function loadLocal(){ try{ state.data = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }catch{ state.data=[]; } }
+    function saveLocal(){ localStorage.setItem(LS_KEY, JSON.stringify(state.data)); }
+
+    /***** UI 渲染 ******/
+    function renderTabs(){
+      $$('.tab').forEach(btn=>{
+        const cat = btn.dataset.cat;
+        const cnt = state.data.filter(d => d.category===cat).length;
+        btn.querySelector('.count').textContent = cnt ? `(${cnt})` : '';
+        const active = state.cat===cat;
+        btn.classList.toggle('btn-primary', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('btn-ghost', !active);
+      });
+    }
+
+    function computeFiltered(){
+      const q = $('#search').value.trim().toLowerCase();
+      state.filtered = state.data
+        .filter(d => d.category===state.cat)
+        .filter(d=>{
+          if(!q) return true;
+          const blob = [d.question,d.wrongAnswer,d.correctAnswer,d.analysis,d.mnemonic,(d.tags||[]).join(',')].join(' ').toLowerCase();
+          return blob.includes(q);
+        });
+
+      // 列表 = 依建立時間；測驗 = 先錯多的
+      if (state.mode==='quiz') {
+        state.filtered.sort((a,b)=>(b.failCount||0)-(a.failCount||0));
+      } else {
+        state.filtered.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+      }
+    }
+
+    function cardEl(it){
+      const el = document.createElement('div');
+      el.className = 'bg-white rounded-xl border border-slate-100 card-shadow p-4';
+      const categoryMap = {Grammar:'📝 文法',Collocations:'🔗 片語',Vocabulary:'💡 單字'};
+      el.innerHTML = `
+        <div class="flex items-center justify-between mb-2">
+          <div class="text-sm text-blue-600 font-semibold">${categoryMap[it.category]||'📄'}</div>
+          <div class="text-xs text-slate-400">
+            ${new Date(it.createdAt||Date.now()).toLocaleDateString('zh-TW')}
+            <span class="ml-2 pill bg-red-100 text-red-600 font-bold">錯 ${it.failCount||0} 次</span>
+          </div>
+        </div>
+        <h3 class="font-bold text-slate-900 mb-2">${escapeHTML(it.question||'')}</h3>
+        <div class="flex flex-wrap gap-1 mb-2">${(it.tags||[]).map(t=>`<span class="pill bg-slate-100 text-slate-600">#${escapeHTML(t)}</span>`).join('')}</div>
+
+        <div class="answer ${state.mode==='quiz'?'hidden-el':''}">
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <div class="p-2 bg-red-50 border border-red-200 rounded-lg"><b class="text-red-600">❌</b> ${escapeHTML(it.wrongAnswer||'')}</div>
+            <div class="p-2 bg-green-50 border border-green-200 rounded-lg"><b class="text-green-600">✅</b> ${escapeHTML(it.correctAnswer||'')}</div>
+          </div>
+          <div class="mt-2 p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg text-sm">
+            <div class="font-semibold text-yellow-800 mb-1">🔎 錯因分析</div>
+            <div class="text-slate-800">${escapeHTML(it.analysis||'—')}</div>
+          </div>
+          <div class="mt-2 p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-lg text-sm">
+            <div class="font-semibold text-indigo-800 mb-1">🎯 記憶口訣/小技巧</div>
+            <div class="text-slate-800">${escapeHTML(it.mnemonic||'—')}</div>
+          </div>
+        </div>
+
+        ${state.mode==='quiz'?`
+          <div class="flex gap-2 mt-3">
+            <button class="btn btn-primary flex-1 js-pass">我會了（－1）</button>
+            <button class="btn btn-ghost flex-1 text-red-600 js-fail">答錯了（＋1）</button>
+          </div>`:
+          `<button class="btn btn-primary w-full mt-3 js-show">顯示答案</button>`}
+
+        <div class="flex justify-end gap-2 mt-3 border-t pt-3 border-slate-100">
+          <button class="btn btn-ghost text-sm js-edit">編輯</button>
+          <button class="btn btn-ghost text-sm text-red-600 js-del">刪除</button>
+          <button class="btn btn-ghost text-sm ${it.isReviewed?'text-green-700 bg-green-100':'text-slate-700 bg-slate-100'} js-review">${it.isReviewed?'✅ 已複習':'🔄 標記已複習'}</button>
+        </div>
+      `;
+
+      el.querySelector('.js-edit').onclick = ()=> openSheet(it);
+      el.querySelector('.js-del').onclick = ()=> delItem(it.id);
+      el.querySelector('.js-review').onclick = ()=> markReviewed(it.id, !it.isReviewed);
+
+      el.querySelector('.js-show')?.addEventListener('click', (e)=>{
+        el.querySelector('.answer').classList.remove('hidden-el');
+        e.target.remove();
+      });
+
+      el.querySelector('.js-pass')?.addEventListener('click', ()=>{
+        updateFailCount(it.id, 'success');
+        el.querySelector('.answer').classList.remove('hidden-el');
+      });
+      el.querySelector('.js-fail')?.addEventListener('click', ()=>{
+        updateFailCount(it.id, 'fail');
+        el.querySelector('.answer').classList.remove('hidden-el');
+      });
+
+      return el;
+    }
+
+    function render(){
+      renderTabs(); computeFiltered();
+      const host = $('#cards'); host.innerHTML = '';
+      if(state.filtered.length===0){ $('#empty').classList.remove('hidden-el'); }
+      else { $('#empty').classList.add('hidden-el'); state.filtered.forEach(it=>host.appendChild(cardEl(it))); }
+      // 模式按鈕樣式
+      const listActive = state.mode==='list';
+      $('#mode-list').classList.toggle('btn-primary', listActive);
+      $('#mode-list').classList.toggle('btn-ghost', !listActive);
+      $('#mode-quiz').classList.toggle('btn-primary', !listActive);
+      $('#mode-quiz').classList.toggle('btn-ghost', listActive);
+      $('#mode-list').classList.toggle('text-white', listActive);
+      $('#mode-quiz').classList.toggle('text-white', !listActive);
+    }
+
+    /***** CRUD *****/
+    function openSheet(it=null){
+      $('#sheet').classList.add('show'); $('#sheet').classList.remove('hidden-el');
+      $('#sheet-title').textContent = it ? '編輯錯題' : '新增錯題';
+      $('#btn-delete').classList.toggle('hidden-el', !it);
+      $('#form-id').value = it?.id || '';
+      $('#form-category').value = it?.category || state.cat;
+      $('#form-question').value = it?.question || '';
+      $('#form-wrong').value = it?.wrongAnswer || '';
+      $('#form-correct').value = it?.correctAnswer || '';
+      $('#form-analysis').value = it?.analysis || '';
+      $('#form-mnemonic').value = it?.mnemonic || '';
+      $('#form-tags').value = (it?.tags||[]).join(', ');
+    }
+    function closeSheet(){
+      $('#sheet').classList.remove('show');
+      setTimeout(()=>$('#sheet').classList.add('hidden-el'), 220);
+    }
+
+    function upsertLocal(obj){
+      const idx = state.data.findIndex(d=>d.id===obj.id);
+      if(idx>=0) state.data[idx]=obj; else state.data.unshift(obj);
+      saveLocal(); render(); toast('已儲存');
+    }
+
+    function delItem(id){
+      if(!confirm('確定刪除這張卡片？')) return;
+      const idx = state.data.findIndex(d=>d.id===id);
+      if(idx>=0){ state.data.splice(idx,1); saveLocal(); render(); toast('已刪除'); }
+    }
+
+    function markReviewed(id,flag){
+      const it = state.data.find(d=>d.id===id); if(!it) return;
+      it.isReviewed = !!flag;
+      if(flag){ it.reviewCount=(it.reviewCount||0)+1; it.lastReviewed=Date.now(); }
+      saveLocal(); render(); toast(flag?'✅ 已標記複習':'已取消複習');
+    }
+
+    function updateFailCount(id, type){
+      const it = state.data.find(d=>d.id===id); if(!it) return;
+      if(type==='fail'){ it.failCount=(it.failCount||0)+1; toast('錯誤 +1'); }
+      else if(type==='success'){ it.failCount=Math.max(0,(it.failCount||0)-1); toast('做得好！-1'); }
+      saveLocal(); render();
+    }
+
+    function importJSON(arr){
+      if(!Array.isArray(arr)) return toast('匯入格式錯誤');
+      const key = (o)=> (o.question||'') + '|' + (o.correctAnswer||'');
+      const map = new Map(state.data.map(o=>[key(o), o]));
+      arr.forEach(o=>{
+        o.id = o.id || uid();
+        o.tags = Array.isArray(o.tags) ? o.tags : String(o.tags||'').split(',').map(s=>s.trim()).filter(Boolean);
+        o.createdAt = o.createdAt || Date.now();
+        o.failCount = o.failCount || 0;
+        map.set(key(o), o);
+      });
+      state.data = Array.from(map.values()).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+      saveLocal(); render(); toast('已匯入');
+    }
+
+    /***** Google Drive ******/
+    function setAuthUI(loggedIn, email=''){
+      const status = $('#auth-status');
+      $('#btn-backup').classList.toggle('disable', !loggedIn);
+      $('#btn-restore').classList.toggle('disable', !loggedIn);
+      if(loggedIn){
+        status.innerHTML = `✅ 已登入 Google${email?`：${email}`:''}`;
+        $('#btn-google').textContent = '登出';
+      }else{
+        status.innerHTML = '🔗 離線模式（請登入 Google）';
+        $('#btn-google').textContent = 'Google 登入';
+      }
+    }
+
+    function ensureGapiReady(cb){
+      if(typeof gapi==='undefined'){ toast('GAPI 未載入，請重整'); return; }
+      gapi.load('client', async ()=>{
+        await gapi.client.init({});
+        await gapi.client.load('https://www.googleapis.com/discovery/v1/apis/drive/v3/rest');
+        cb && cb();
+      });
+    }
+
+    function initTokenClient(){
+      if(typeof google==='undefined' || !google.accounts?.oauth2){ toast('GIS 未載入'); return; }
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPE,
+        callback: async (resp)=>{
+          if(resp.error){ toast('登入失敗'); return; }
+          gapi.client.setToken(resp);
+          setAuthUI(true);
+          // 試著找既有備份檔
+          try{
+            const r = await gapi.client.drive.files.list({ spaces:'appDataFolder', q:`name='${DRIVE_FILE}'`, fields:'files(id,modifiedTime)' });
+            driveFileId = (r.result.files?.[0]?.id) || null;
+          }catch(e){ console.warn(e); }
+        }
+      });
+    }
+
+    async function authorize(){
+      if(!tokenClient) initTokenClient();
+      tokenClient.requestAccessToken({prompt:'consent'});
+    }
+
+    function signOut(){
+      const tok = gapi.client.getToken();
+      if(tok?.access_token){
+        google.accounts.oauth2.revoke(tok.access_token, ()=>{ gapi.client.setToken(null); setAuthUI(false); driveFileId=null; toast('已登出'); });
+      }else{
+        setAuthUI(false);
+      }
+    }
+
+    async function backupToDrive(){
+      if(!gapi.client.getToken()){ toast('請先登入'); return; }
+      $('#loading').classList.remove('hidden-el');
+
+      const content = JSON.stringify(state.data, null, 2);
+      const boundary = 'batch' + Date.now();
+      const metadata = { name:DRIVE_FILE, mimeType:'application/json', parents:['appDataFolder'] };
+
+      try{
+        // 先找舊檔
+        const list = await gapi.client.drive.files.list({ spaces:'appDataFolder', q:`name='${DRIVE_FILE}'`, fields:'files(id)' });
+        driveFileId = list.result.files?.[0]?.id || null;
+
+        const multipartBody =
+          `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+          JSON.stringify(metadata) + `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+          content + `\r\n--${boundary}--`;
+
+        const path = driveFileId ? `/upload/drive/v3/files/${driveFileId}` : '/upload/drive/v3/files';
+        const method = driveFileId ? 'PATCH' : 'POST';
+
+        await gapi.client.request({
+          path: path,
+          method: method,
+          params: { uploadType:'multipart' },
+          headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+          body: multipartBody
+        });
+
+        toast('備份成功！');
+      }catch(e){
+        console.error(e);
+        toast('備份失敗：請檢查權限或網路');
+      }finally{
+        $('#loading').classList.add('hidden-el');
+      }
+    }
+
+    async function restoreFromDrive(){
+      if(!gapi.client.getToken()){ toast('請先登入'); return; }
+      $('#loading').classList.remove('hidden-el');
+      try{
+        if(!driveFileId){
+          const list = await gapi.client.drive.files.list({ spaces:'appDataFolder', q:`name='${DRIVE_FILE}'`, fields:'files(id)' });
+          driveFileId = list.result.files?.[0]?.id || null;
+          if(!driveFileId){ toast('雲端沒有備份'); $('#loading').classList.add('hidden-el'); return; }
+        }
+        const r = await gapi.client.drive.files.get({ fileId: driveFileId, alt:'media' });
+        if(Array.isArray(r.result)){ state.data = r.result; saveLocal(); render(); toast('還原成功！'); }
+        else toast('格式不正確');
+      }catch(e){
+        console.error(e); toast('還原失敗');
+      }finally{
+        $('#loading').classList.add('hidden-el');
+      }
+    }
+
+    /***** 事件綁定 ******/
+    // 分類
+    $$('.tab').forEach(b => b.addEventListener('click', ()=>{ state.cat = b.dataset.cat; render(); }));
+    // 模式
+    $('#mode-list').addEventListener('click', ()=>{ state.mode='list'; render(); });
+    $('#mode-quiz').addEventListener('click', ()=>{ state.mode='quiz'; render(); });
+    // 搜尋
+    $('#search').addEventListener('input', render);
+    // Sheet
+    $('#btn-add').addEventListener('click', ()=> openSheet());
+    $('#sheet-close').addEventListener('click', closeSheet);
+    $('#form').addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const id = $('#form-id').value || uid();
+      const existed = state.data.find(d=>d.id===id);
+      const obj = {
+        id,
+        category: $('#form-category').value,
+        question: $('#form-question').value.trim(),
+        wrongAnswer: $('#form-wrong').value.trim(),
+        correctAnswer: $('#form-correct').value.trim(),
+        analysis: $('#form-analysis').value.trim(),
+        mnemonic: $('#form-mnemonic').value.trim(),
+        tags: $('#form-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+        createdAt: existed?.createdAt || Date.now(),
+        isReviewed: existed?.isReviewed || false,
+        reviewCount: existed?.reviewCount || 0,
+        lastReviewed: existed?.lastReviewed || 0,
+        failCount: existed?.failCount || 0,
+      };
+      upsertLocal(obj); closeSheet();
+    });
+    $('#btn-delete').addEventListener('click', ()=>{
+      const id = $('#form-id').value; if(id){ closeSheet(); delItem(id); }
+    });
+
+    // Local import/export
+    $('#btn-export').addEventListener('click', ()=>{
+      const data = JSON.stringify(state.data, null, 2);
+      const url = URL.createObjectURL(new Blob([data], {type:'application/json'}));
+      const a = Object.assign(document.createElement('a'), {href:url, download:`english-mistakes-${Date.now()}.json`});
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),500);
+      toast('已匯出');
+    });
+    $('#file-import').addEventListener('change', (e)=>{
+      const f = e.target.files[0]; if(!f) return;
+      const r = new FileReader(); r.onload=()=>{ try{ importJSON(JSON.parse(r.result)); }catch{ toast('匯入失敗'); } };
+      r.readAsText(f); e.target.value='';
+    });
+
+    // Google
+    $('#btn-google').addEventListener('click', ()=>{
+      const token = gapi?.client?.getToken?.();
+      if(token){ signOut(); } else { authorize(); }
+    });
+    $('#btn-backup').addEventListener('click', backupToDrive);
+    $('#btn-restore').addEventListener('click', restoreFromDrive);
+
+    /***** 啟動序列 ******/
+    // 資料、UI
+    loadLocal(); render();
+
+    // 等待腳本載入完成再初始化 GAPI/GIS
+    window.addEventListener('load', ()=>{
+      // GAPI
+      ensureGapiReady(()=>{
+        setAuthUI(!!gapi.client.getToken());
+      });
+      // GIS
+      initTokenClient();
+    });
+  </script>
+</body>
+</html>
