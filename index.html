@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>📒 英文錯題本（Drive 雲端）</title>
+
+  <!-- PWA -->
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!-- UI：Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    html,body{height:100%}
+    body{font-family:'Inter', system-ui,-apple-system,Segoe UI,Roboto,'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;background:#f8fafc}
+    .tap{-webkit-tap-highlight-color:transparent}
+    .btn{padding:.625rem .875rem;border-radius:.75rem;font-weight:700;transition:transform .06s}
+    .btn:active{transform:scale(.98)}
+    .btn-primary{background:#2563eb;color:#fff}
+    .btn-ghost{background:#eef2f7;color:#1f2937}
+    .btn-danger{background:#ef4444;color:#fff}
+    .card{background:#fff;border:1px solid #eef2f7;border-radius:1rem;box-shadow:0 10px 15px -8px rgba(0,0,0,.08)}
+    .pill{font-size:12px;padding:.125rem .5rem;border-radius:9999px}
+    .safe-top{padding-top:calc(env(safe-area-inset-top) + .5rem)}
+    .safe-bottom{padding-bottom:calc(env(safe-area-inset-bottom) + 1rem)}
+    .sticky-header{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid #e5e7eb}
+    .toolbar .btn{min-height:48px}              /* iPhone 15 Pro Max 可觸區 */
+    .floating-add{width:64px;height:64px;border-radius:9999px}
+    .disabled{opacity:.45;pointer-events:none}
+    .quiz-opt{display:flex;align-items:center;gap:.75rem;border:1.5px solid #e5e7eb;border-radius:.875rem;padding:.875rem 1rem;font-weight:700}
+    .opt-A::before{content:'A';display:inline-grid;place-items:center;width:36px;height:36px;border-radius:9999px;background:#eef2ff;color:#1d4ed8;font-weight:800}
+    .opt-B::before{content:'B';display:inline-grid;place-items:center;width:36px;height:36px;border-radius:9999px;background:#eef2ff;color:#1d4ed8;font-weight:800}
+    .opt-C::before{content:'C';display:inline-grid;place-items:center;width:36px;height:36px;border-radius:9999px;background:#eef2ff;color:#1d4ed8;font-weight:800}
+    .opt-D::before{content:'D';display:inline-grid;place-items:center;width:36px;height:36px;border-radius:9999px;background:#eef2ff;color:#1d4ed8;font-weight:800}
+    .opt-right{border-color:#16a34a;background:#ecfdf5}
+    .opt-wrong{border-color:#ef4444;background:#fef2f2}
+    /* Sheet (表單) */
+    #sheet{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:end;z-index:50}
+    #sheet .panel{background:#fff;border-top-left-radius:1.25rem;border-top-right-radius:1.25rem;max-width:720px;margin:0 auto;width:100%}
+    #sheet .titlebar{position:sticky;top:0;background:#fff;border-bottom:1px solid #e5e7eb;z-index:10}
+    /* 統計面板 */
+    #stats{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:50}
+  </style>
+
+  <!-- Google 身分與 API -->
+  <script async defer src="https://accounts.google.com/gsi/client"></script>
+  <script async defer src="https://apis.google.com/js/api.js"></script>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="sticky-header safe-top">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-start gap-3">
+      <div class="flex-1">
+        <div class="text-xs text-gray-400">ENG Error Notebook</div>
+        <h1 class="text-2xl font-extrabold text-gray-800">📒 英文錯題本（Drive 雲端）</h1>
+        <div id="drive-status" class="text-xs text-gray-500 mt-1">離線模式（尚未登入）</div>
+      </div>
+      <!-- 右上角工具列：加高可點擊 -->
+      <div class="toolbar grid grid-cols-3 gap-3">
+        <button id="btn-auth" class="btn btn-primary">Google 登入</button>
+        <button id="btn-backup" class="btn btn-primary disabled">備份</button>
+        <button id="btn-restore" class="btn btn-ghost disabled">還原</button>
+      </div>
+    </div>
+    <div class="max-w-3xl mx-auto px-4 pb-3">
+      <button id="btn-import-file" class="btn btn-ghost">匯入（檔案）</button>
+      <input id="file-import" type="file" accept="application/json" class="hidden" />
+    </div>
+  </header>
+
+  <!-- 類別 Tabs -->
+  <nav class="bg-white border-b border-gray-200">
+    <div class="max-w-3xl mx-auto px-2 py-2 grid grid-cols-3 gap-2">
+      <button data-cat="Grammar" class="tab btn btn-ghost tap">📝 文法 <span class="count text-gray-400"></span></button>
+      <button data-cat="Collocations" class="tab btn btn-ghost tap">🔗 片語 <span class="count text-gray-400"></span></button>
+      <button data-cat="Vocabulary" class="tab btn btn-ghost tap">💡 單字 <span class="count text-gray-400"></span></button>
+    </div>
+  </nav>
+
+  <!-- 搜尋＋模式切換 -->
+  <section class="bg-white">
+    <div class="max-w-3xl mx-auto px-4 py-3 flex items-center gap-2">
+      <div class="flex-1 relative">
+        <input id="search" type="search" placeholder="搜尋題幹/標籤（ex: 介系詞 / schedule）"
+               class="w-full rounded-lg border border-gray-300 px-3 py-2 pl-9 focus:ring-2 focus:ring-blue-500 outline-none">
+        <div class="absolute left-2 top-2.5 text-gray-400">🔎</div>
+      </div>
+      <button id="mode-flip" class="btn btn-ghost" data-mode="flip">📑 快速翻</button>
+      <button id="mode-quiz" class="btn btn-ghost" data-mode="quiz">❓ 測驗</button>
+    </div>
+
+    <!-- 常錯統計 -->
+    <div class="max-w-3xl mx-auto px-4 pb-3 flex items-center gap-3">
+      <span class="text-sm text-gray-600">📈 常錯統計：</span>
+      <button id="btn-stats" class="pill bg-slate-100 text-slate-700">文法 0</button>
+      <span class="pill bg-slate-100 text-slate-700">片語 0</span>
+      <span class="pill bg-slate-100 text-slate-700">單字 0</span>
+    </div>
+  </section>
+
+  <!-- 主內容 -->
+  <main class="flex-1">
+    <div id="cards" class="max-w-3xl mx-auto px-4 py-4 space-y-4"></div>
+    <div id="empty" class="hidden max-w-3xl mx-auto px-4 py-16 text-center text-gray-500">
+      目前沒有資料，點右下角 <b>＋</b> 新增第一張卡片吧！
+    </div>
+  </main>
+
+  <!-- 新增按鈕 -->
+  <div class="fixed right-5 bottom-5 z-40">
+    <button id="btn-add" class="btn btn-primary floating-add shadow-xl text-3xl leading-none">＋</button>
+  </div>
+
+  <!-- 表單 Sheet -->
+  <div id="sheet">
+    <div class="panel max-h-[88vh] w-full">
+      <div class="titlebar px-4 pt-3 pb-2 flex items-center justify-between">
+        <h2 id="sheet-title" class="text-lg font-bold">新增錯題</h2>
+        <button id="sheet-close" class="btn btn-ghost">✕</button>
+      </div>
+      <form id="form" class="p-4 space-y-3 overflow-y-auto" style="max-height:60vh">
+        <input type="hidden" id="form-id" />
+        <div>
+          <label class="text-sm text-gray-700">分類</label>
+          <select id="form-category" class="w-full border rounded-lg px-3 py-2">
+            <option value="Grammar">文法</option>
+            <option value="Collocations">片語</option>
+            <option value="Vocabulary">單字</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm text-gray-700">題幹（可貼文章段落）</label>
+          <textarea id="form-question" rows="3" class="w-full border rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-sm text-gray-700">A</label><input id="form-a" class="w-full border rounded-lg px-3 py-2"></div>
+          <div><label class="text-sm text-gray-700">B</label><input id="form-b" class="w-full border rounded-lg px-3 py-2"></div>
+          <div><label class="text-sm text-gray-700">C</label><input id="form-c" class="w-full border rounded-lg px-3 py-2"></div>
+          <div><label class="text-sm text-gray-700">D</label><input id="form-d" class="w-full border rounded-lg px-3 py-2"></div>
+        </div>
+        <div>
+          <label class="text-sm text-gray-700">正解（輸入 A/B/C/D）</label>
+          <input id="form-answer" class="w-full border rounded-lg px-3 py-2" placeholder="A / B / C / D" />
+        </div>
+        <div>
+          <label class="text-sm text-gray-700">🔎 錯因分析</label>
+          <textarea id="form-analysis" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div>
+          <label class="text-sm text-gray-700">🎯 記憶口訣/小技巧</label>
+          <textarea id="form-mnemonic" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div>
+          <label class="text-sm text-gray-700">標籤（以 # 開頭可做統計，如：#介系詞, #形容詞）</label>
+          <input id="form-tags" class="w-full border rounded-lg px-3 py-2" placeholder="#介系詞, #Part5">
+        </div>
+        <div class="flex items-center justify-between pt-2">
+          <button type="button" id="btn-delete" class="hidden text-red-600">刪除</button>
+          <button class="btn btn-primary">儲存</button>
+        </div>
+      </form>
+      <div class="p-3 safe-bottom">
+        <button id="sheet-close-bottom" class="btn btn-ghost w-full">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 統計面板 -->
+  <div id="stats">
+    <div class="card w-[92%] max-w-xl bg-white p-4 safe-bottom">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="font-bold">文法常錯細項</h3>
+        <button id="stats-close" class="btn btn-ghost">✕</button>
+      </div>
+      <div id="stats-body" class="text-sm text-gray-700 space-y-2 max-h-[60vh] overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <!-- 提示 -->
+  <div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-28 z-[100] hidden">
+    <div class="bg-gray-900 text-white text-sm px-3 py-2 rounded-full shadow-lg">已儲存</div>
+  </div>
+
+  <!-- 載入遮罩 -->
+  <div id="loading" class="fixed inset-0 bg-white/80 flex items-center justify-center z-[80] hidden">
+    <div class="text-center">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
+      <p class="text-gray-700">同步中...</p>
+    </div>
+  </div>
+
+  <script>
+  /* ========= 基礎工具 ========= */
+  const $ = (s)=>document.querySelector(s);
+  const $$ = (s)=>Array.from(document.querySelectorAll(s));
+  const uid = ()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+  const LS_KEY='eng_error_cards_v3';
+  const state={cat:'Grammar',mode:'flip',data:[],filtered:[]};
+
+  const toast=(msg='已儲存')=>{
+    const t=$("#toast"); t.firstElementChild.textContent=msg;
+    t.classList.remove('hidden'); setTimeout(()=>t.classList.add('hidden'),1400);
+  };
+
+  const loadLocal=()=>{ try{state.data=JSON.parse(localStorage.getItem(LS_KEY)||'[]');}catch{state.data=[];} };
+  const saveLocal=()=>localStorage.setItem(LS_KEY, JSON.stringify(state.data));
+
+  /* ========= UI 渲染 ========= */
+  function renderTabs(){
+    $$('.tab').forEach(btn=>{
+      const cat=btn.dataset.cat;
+      const count=state.data.filter(d=>d.category===cat).length;
+      btn.querySelector('.count').textContent=count?`(${count})`:'';
+      const active = state.cat===cat;
+      btn.classList.toggle('btn-primary',active);
+      btn.classList.toggle('btn-ghost',!active);
+      btn.classList.toggle('text-white',active);
+    });
+    // 統計氣泡
+    const g = state.data.filter(d=>d.category==='Grammar');
+    const c = state.data.filter(d=>d.category==='Collocations');
+    const v = state.data.filter(d=>d.category==='Vocabulary');
+    const pills = document.querySelectorAll('section .pill');
+    pills[0].textContent = `文法 ${g.length}`;
+    pills[1].textContent = `片語 ${c.length}`;
+    pills[2].textContent = `單字 ${v.length}`;
+  }
+
+  function computeFiltered(){
+    const q = $('#search').value.trim().toLowerCase();
+    state.filtered = state.data
+      .filter(d=>d.category===state.cat)
+      .filter(d=>{
+        if(!q) return true;
+        const blob=[d.question,d.analysis,d.mnemonic,(d.tags||[]).join(',')].join(' ').toLowerCase();
+        return blob.includes(q);
+      })
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  }
+
+  function render(){
+    renderTabs(); computeFiltered();
+    const host=$("#cards"); host.innerHTML='';
+    if(state.filtered.length===0){ $("#empty").classList.remove('hidden'); return; }
+    $("#empty").classList.add('hidden');
+    state.filtered.forEach(it=>host.appendChild(cardEl(it)));
+  }
+
+  function cardEl(it){
+    const wrap=document.createElement('div');
+    wrap.className='card p-4';
+    const tagHTML=(it.tags||[]).map(t=>`<span class="pill bg-gray-100 text-gray-600 mr-1">#${t.replace(/^#/, '')}</span>`).join('');
+    const header = `
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm text-blue-600 font-semibold">${({'Grammar':'📝 文法','Collocations':'🔗 片語','Vocabulary':'💡 單字'}[it.category])}</div>
+        <div class="text-xs text-gray-400">${new Date(it.createdAt||Date.now()).toLocaleDateString()}</div>
+      </div>
+      <div class="text-xs text-gray-500 mb-2">
+        <span class="mr-2">錯 <b class="text-red-600">${it.wrongCount||0}</b></span>
+        <span>❤️ <b class="text-pink-600">${it.heart||0}</b></span>
+      </div>
+      <div class="font-bold text-gray-900 whitespace-pre-wrap mb-2">${it.question?it.question: ''}</div>
+      <div class="mb-2">${tagHTML}</div>
+    `;
+    wrap.insertAdjacentHTML('afterbegin', header);
+
+    if(state.mode==='flip'){
+      // 詳解模式
+      const detail = document.createElement('div');
+      detail.innerHTML = `
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <div class="p-2 bg-slate-50 border rounded-lg"><b>A</b> ${it.optA||''}</div>
+          <div class="p-2 bg-slate-50 border rounded-lg"><b>B</b> ${it.optB||''}</div>
+          <div class="p-2 bg-slate-50 border rounded-lg"><b>C</b> ${it.optC||''}</div>
+          <div class="p-2 bg-slate-50 border rounded-lg"><b>D</b> ${it.optD||''}</div>
+        </div>
+        <div class="mt-2 p-3 bg-green-50 border-l-4 border-green-500 rounded-r-lg text-sm">
+          <div class="font-semibold text-green-800 mb-1">✅ 正解</div>
+          <div class="text-gray-800">${it.answer||'—'}</div>
+        </div>
+        <div class="mt-2 p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg text-sm">
+          <div class="font-semibold text-yellow-800 mb-1">🔎 錯因分析</div>
+          <div class="text-gray-800 whitespace-pre-wrap">${it.analysis||'—'}</div>
+        </div>
+        <div class="mt-2 p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-lg text-sm">
+          <div class="font-semibold text-indigo-800 mb-1">🎯 記憶口訣/小技巧</div>
+          <div class="text-gray-800 whitespace-pre-wrap">${it.mnemonic||'—'}</div>
+        </div>
+        <div class="flex justify-end gap-2 mt-3">
+          <button class="btn btn-ghost text-sm js-edit">編輯</button>
+          <button class="btn btn-danger text-sm js-del">刪除</button>
+          <button class="btn btn-ghost text-sm js-review">${it.isReviewed?'✅ 已複習':'🔄 標記已複習'}</button>
+        </div>
+      `;
+      wrap.appendChild(detail);
+    }else{
+      // 測驗模式（只顯示 A/B/C/D 選項）
+      const q = document.createElement('div');
+      q.className='space-y-2';
+      [['A','optA'],['B','optB'],['C','optC'],['D','optD']].forEach(([k,key])=>{
+        const b=document.createElement('button');
+        b.type='button';
+        b.className=`quiz-opt opt-${k}`;
+        b.textContent = ''; // 不顯示文字，只顯示 ABCD 圓點
+        b.addEventListener('click',()=>{
+          // 先清樣式
+          q.querySelectorAll('.quiz-opt').forEach(x=>x.classList.remove('opt-right','opt-wrong'));
+          const isRight = (it.answer||'').toUpperCase().trim()===k;
+          if(isRight){
+            b.classList.add('opt-right');
+            it.heart = (it.heart||0)+1;
+          }else{
+            b.classList.add('opt-wrong');
+            it.wrongCount = (it.wrongCount||0)+1;
+          }
+          saveLocal(); render(); // 更新卡片計數
+        });
+        q.appendChild(b);
+      });
+      // 動作列
+      const ops=document.createElement('div');
+      ops.className='flex justify-end gap-2 mt-3';
+      ops.innerHTML=`
+        <button class="btn btn-ghost text-sm js-edit">編輯</button>
+        <button class="btn btn-danger text-sm js-del">刪除</button>
+        <button class="btn btn-ghost text-sm js-review">${it.isReviewed?'✅ 已複習':'🔄 標記已複習'}</button>
+      `;
+      wrap.appendChild(q); wrap.appendChild(ops);
+    }
+
+    // 事件
+    wrap.querySelector('.js-edit').onclick=()=>openSheet(it);
+    wrap.querySelector('.js-del').onclick=()=>delItem(it.id);
+    wrap.querySelector('.js-review').onclick=()=>markReviewed(it.id, !(it.isReviewed));
+
+    return wrap;
+  }
+
+  /* ========= CRUD ========= */
+  function openSheet(it=null){
+    $('#sheet').style.display='flex';
+    $('#sheet-title').textContent = it?'編輯錯題':'新增錯題';
+    $('#btn-delete').classList.toggle('hidden', !it);
+    $('#form-id').value = it?.id || '';
+    $('#form-category').value = it?.category || state.cat;
+    $('#form-question').value = it?.question || '';
+    $('#form-a').value = it?.optA || '';
+    $('#form-b').value = it?.optB || '';
+    $('#form-c').value = it?.optC || '';
+    $('#form-d').value = it?.optD || '';
+    $('#form-answer').value = it?.answer || '';
+    $('#form-analysis').value = it?.analysis || '';
+    $('#form-mnemonic').value = it?.mnemonic || '';
+    $('#form-tags').value = (it?.tags||[]).join(', ');
+  }
+  function closeSheet(){ $('#sheet').style.display='none'; }
+  function upsertLocal(obj){
+    const i=state.data.findIndex(d=>d.id===obj.id);
+    if(i>=0) state.data[i]=obj; else state.data.unshift(obj);
+    saveLocal(); render(); toast('已儲存');
+  }
+  function delItem(id){
+    if(!confirm('確定刪除？'))return;
+    const i=state.data.findIndex(d=>d.id===id);
+    if(i>=0){ state.data.splice(i,1); saveLocal(); render(); }
+  }
+  function markReviewed(id,flag){
+    const it=state.data.find(d=>d.id===id); if(!it)return;
+    it.isReviewed=!!flag; it.lastReviewed=Date.now();
+    saveLocal(); render();
+  }
+
+  /* ========= 常錯統計 ========= */
+  function openStats(){
+    const list = state.data.filter(d=>d.category==='Grammar');
+    const map = new Map();
+    list.forEach(it=>{
+      (it.tags||[]).forEach(t=>{
+        const key=t.replace(/^#/, '');
+        const wrong = it.wrongCount||0;
+        map.set(key, (map.get(key)||0) + wrong);
+      });
+    });
+    const arr=[...map.entries()].sort((a,b)=>b[1]-a[1]);
+    $('#stats-body').innerHTML = arr.length
+      ? arr.map(([k,v])=>`<div class="flex items-center justify-between"><div>#${k}</div><div class="text-red-600 font-bold">錯 ${v}</div></div>`).join('')
+      : '<div class="text-gray-500">暫無統計資料</div>';
+    $('#stats').style.display='flex';
+  }
+  const closeStats=()=>$('#stats').style.display='none';
+
+  /* ========= 匯入 ========= */
+  function importJSON(arr){
+    if(!Array.isArray(arr)) return toast('匯入格式錯誤');
+    const key=(o)=> (o.question||'') + '|' + (o.answer||'');
+    const map = new Map(state.data.map(o=>[key(o),o]));
+    arr.forEach(o=>{
+      o.id=o.id||uid();
+      o.tags = Array.isArray(o.tags)? o.tags : String(o.tags||'').split(',').map(s=>s.trim()).filter(Boolean);
+      map.set(key(o), {...o});
+    });
+    state.data=[...map.values()].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    saveLocal(); render(); toast('已匯入');
+  }
+
+  /* ========= Google Drive ========= */
+  const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID_HERE'; // ←←換成你的
+  const SCOPES = [
+    'https://www.googleapis.com/auth/drive.appdata',
+    'https://www.googleapis.com/auth/userinfo.email'
+  ].join(' ');
+  const DRIVE_FILE_NAME='english_mistakes_v3.json';
+
+  let tokenClient=null, accessToken=null, driveFileId=null;
+
+  function updateAuthUI(logged){
+    const s=$('#drive-status'), ba=$('#btn-backup'), rs=$('#btn-restore'), au=$('#btn-auth');
+    if(logged){
+      s.textContent='✅ 已登入 Google';
+      ba.classList.remove('disabled'); rs.classList.remove('disabled');
+      au.textContent='登出'; au.onclick=signOut;
+    }else{
+      s.textContent='離線模式（尚未登入）';
+      ba.classList.add('disabled'); rs.classList.add('disabled');
+      au.textContent='Google 登入'; au.onclick=startAuth;
+    }
+  }
+
+  function initGoogle(){
+    gapi.load('client', async ()=>{
+      await gapi.client.init({
+        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest']
+      });
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: SCOPES,
+        prompt: 'consent',
+        callback: (resp)=>{
+          if(resp && resp.access_token){
+            accessToken=resp.access_token;
+            gapi.client.setToken({access_token:accessToken});
+            updateAuthUI(true);
+            findAppDataFile();
+          }else{
+            toast('登入失敗'); updateAuthUI(false);
+          }
+        }
+      });
+      updateAuthUI(false);
+    });
+  }
+  function startAuth(){
+    if(!tokenClient){ toast('Google 服務未就緒'); return; }
+    tokenClient.requestAccessToken();
+  }
+  function signOut(){
+    if(!accessToken) return;
+    google.accounts.oauth2.revoke(accessToken, ()=>{
+      accessToken=null; driveFileId=null; updateAuthUI(false);
+      toast('已登出');
+    });
+  }
+
+  async function findAppDataFile(){
+    try{
+      const resp = await gapi.client.drive.files.list({
+        spaces: 'appDataFolder', q: `name='${DRIVE_FILE_NAME}'`, fields: 'files(id,modifiedTime)'
+      });
+      driveFileId = (resp.result.files[0]?.id) || null;
+    }catch(e){
+      // 常見：未啟用 Drive API / scope 不符
+      console.warn(e);
+    }
+  }
+
+  async function backupToDrive(){
+    if(!accessToken){ toast('請先登入 Google'); return; }
+    $('#loading').classList.remove('hidden');
+    try{
+      const data = JSON.stringify(state.data, null, 2);
+      // 若已有檔案：直接以 media 更新；否則建立 multipart
+      if(driveFileId){
+        const res = await gapi.client.request({
+          path: `/upload/drive/v3/files/${driveFileId}`,
+          method: 'PATCH',
+          params: {uploadType:'media'},
+          headers: {'Content-Type':'application/json'},
+          body: data
+        });
+        if(res.status===200){ toast('✅ 備份成功'); }
+      }else{
+        const metadata = {name:DRIVE_FILE_NAME, parents:['appDataFolder']};
+        const boundary='-------eng-notebook-'+Date.now();
+        const body =
+          `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`+
+          `${JSON.stringify(metadata)}\r\n`+
+          `--${boundary}\r\nContent-Type: application/json\r\n\r\n`+
+          `${data}\r\n--${boundary}--`;
+        const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+          method:'POST',
+          headers:{
+            'Authorization':`Bearer ${accessToken}`,
+            'Content-Type':`multipart/related; boundary=${boundary}`
+          },
+          body
+        });
+        if(res.ok){ const j=await res.json(); driveFileId=j.id; toast('✅ 備份成功'); }
+        else throw await res.json();
+      }
+    }catch(err){
+      console.error(err);
+      // 友善提示
+      toast('備份失敗：請到 GCP 啟用 Google Drive API，或稍後再試');
+    }finally{
+      $('#loading').classList.add('hidden');
+    }
+  }
+
+  async function restoreFromDrive(){
+    if(!accessToken){ toast('請先登入 Google'); return; }
+    $('#loading').classList.remove('hidden');
+    try{
+      await findAppDataFile();
+      if(!driveFileId){ toast('雲端尚無備份'); return; }
+      const res = await gapi.client.drive.files.get({fileId:driveFileId, alt:'media'});
+      if(res.result){ importJSON(res.result); toast('✅ 還原成功'); }
+    }catch(err){
+      console.error(err);
+      toast('還原失敗：請確認 API 權限或稍後再試');
+    }finally{
+      $('#loading').classList.add('hidden');
+    }
+  }
+
+  /* ========= 事件 ========= */
+  // Tabs
+  $$('.tab').forEach(b=>b.onclick=()=>{ state.cat=b.dataset.cat; render(); });
+  // 模式
+  $('#mode-flip').onclick=()=>{ state.mode='flip'; render(); $('#mode-flip').classList.add('btn-primary'); $('#mode-quiz').classList.remove('btn-primary'); };
+  $('#mode-quiz').onclick=()=>{ state.mode='quiz'; render(); $('#mode-quiz').classList.add('btn-primary'); $('#mode-flip').classList.remove('btn-primary'); };
+  // 新增
+  $('#btn-add').onclick=()=>openSheet();
+  $('#sheet-close').onclick=closeSheet;
+  $('#sheet-close-bottom').onclick=closeSheet;
+  // 表單送出
+  $('#form').onsubmit=(e)=>{
+    e.preventDefault();
+    const id = $('#form-id').value || uid();
+    const existed = state.data.find(d=>d.id===id);
+    const obj = {
+      id,
+      category: $('#form-category').value,
+      question: $('#form-question').value.trim(),
+      optA: $('#form-a').value.trim(),
+      optB: $('#form-b').value.trim(),
+      optC: $('#form-c').value.trim(),
+      optD: $('#form-d').value.trim(),
+      answer: $('#form-answer').value.trim().toUpperCase(),
+      analysis: $('#form-analysis').value.trim(),
+      mnemonic: $('#form-mnemonic').value.trim(),
+      tags: $('#form-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+      createdAt: existed? existed.createdAt : Date.now(),
+      wrongCount: existed? (existed.wrongCount||0) : 0,
+      heart: existed? (existed.heart||0) : 0,
+      isReviewed: existed? !!existed.isReviewed : false
+    };
+    upsertLocal(obj); closeSheet();
+  };
+  $('#btn-delete').onclick=()=>{
+    const id=$('#form-id').value; if(id){ closeSheet(); delItem(id); }
+  };
+
+  // 匯入（檔案）
+  $('#btn-import-file').onclick=()=>$('#file-import').click();
+  $('#file-import').onchange=(e)=>{
+    const f=e.target.files[0]; if(!f) return;
+    const r=new FileReader();
+    r.onload=()=>{ try{ importJSON(JSON.parse(r.result)); }catch{ toast('匯入失敗'); } };
+    r.readAsText(f); e.target.value='';
+  };
+
+  // 統計
+  $('#btn-stats').onclick=openStats;
+  $('#stats-close').onclick=closeStats;
+  $('#stats').addEventListener('click', (e)=>{ if(e.target.id==='stats') closeStats(); });
+
+  // 備份/還原
+  $('#btn-backup').onclick=backupToDrive;
+  $('#btn-restore').onclick=restoreFromDrive;
+
+  // 初始化
+  if('serviceWorker' in navigator){ window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+  loadLocal(); render();
+  initGoogle();
+  </script>
+</body>
+</html>
