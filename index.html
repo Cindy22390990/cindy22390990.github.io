@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>📒 英文錯題本（Drive 雲端）</title>
+<meta name="theme-color" content="#2563eb" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap" rel="stylesheet" />
+<script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
+<script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+  :root{--safe-top:max(env(safe-area-inset-top),28px);--safe-side:max(env(safe-area-inset-left),16px);--pad:16px;}
+  body{font-family:'Inter',system-ui,-apple-system,'SF Pro Text','PingFang TC','Noto Sans TC','Microsoft JhengHei',sans-serif;background:#f7f9fc;color:#0f172a;}
+  .safe-top{height:var(--safe-top)}
+  .container-pad{padding-left:calc(var(--safe-side) + var(--pad));padding-right:calc(var(--safe-side) + var(--pad))}
+  .header{position:sticky;top:0;z-index:40;background:#fff;border-bottom:1px solid #e5e7eb;backdrop-filter:blur(6px)}
+  .btn{border-radius:14px;font-weight:800;padding:.65rem 1rem;transition:.06s transform,color .06s}
+  .btn:active{transform:scale(.98);color:#2563eb}
+  .btn-lg{min-height:54px}
+  .btn-primary{background:#2563eb;color:#fff}
+  .btn-ghost{background:#eef2f7;color:#334155}
+  .pill{font-size:12px;border-radius:9999px;padding:.125rem .5rem}
+  .card{background:#fff;border:1px solid #eef2f7;border-radius:16px;box-shadow:0 8px 18px rgba(15,23,42,.06);padding:1rem;margin:.5rem 0}
+  .badge{font-size:12px;background:#f1f5f9;color:#64748b;border-radius:10px;padding:.1rem .45rem}
+  .hidden-hard{display:none!important}
+  #loading{position:fixed;inset:0;background:rgba(255,255,255,.78);display:flex;align-items:center;justify-content:center;z-index:100}
+  #loading.hidden{display:none!important}
+  .opt{display:flex;align-items:center;gap:10px;border:1px solid #e6eaf0;border-radius:12px;padding:14px 12px;cursor:pointer}
+  .opt.active{border-color:#2563eb;background:#eef4ff;color:#2563eb}
+  .opt.correct{border-color:#16a34a;background:#ecfdf5}
+  .opt.wrong{border-color:#dc2626;background:#fef2f2}
+</style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+  <div class="safe-top"></div>
+
+  <header class="header">
+    <div class="container-pad">
+      <h1 class="text-2xl font-black leading-tight">📒 英文錯題本 <span class="text-slate-500 font-extrabold">（Drive 雲端）</span></h1>
+      <div id="drive-status" class="text-xs text-slate-500 mt-1">離線模式（尚未登入）</div>
+      <div class="flex flex-wrap gap-3 pb-3 mt-2">
+        <button id="btn-auth" class="btn btn-lg btn-primary">Google 登入</button>
+        <button id="btn-backup" class="btn btn-lg btn-ghost">備份</button>
+        <button id="btn-restore" class="btn btn-lg btn-ghost">還原</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container-pad flex-1">
+    <div class="mt-3 grid grid-cols-3 gap-3">
+      <button id="tab-grammar" class="btn btn-ghost">📝 文法</button>
+      <button id="tab-collocations" class="btn btn-ghost">🔗 片語</button>
+      <button id="tab-vocab" class="btn btn-ghost">💡 單字</button>
+    </div>
+    <div class="mt-3 flex gap-3">
+      <button id="btn-quick" class="btn btn-ghost">⚡ 快速翻</button>
+      <button id="btn-quiz" class="btn btn-ghost">📝 測驗</button>
+    </div>
+
+    <div id="list" class="mt-5"></div>
+  </main>
+
+  <div id="loading" class="hidden"><div>處理中...</div></div>
+
+<script>
+let state={data:[],filter:null};
+
+// ====== Google Drive Auth ======
+const GOOGLE_CLIENT_ID="1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com";
+const SCOPES="https://www.googleapis.com/auth/drive.appdata";
+let tokenClient,accessToken=null,driveFileId=null;
+
+function updateDriveStatus(isLogin){
+  document.getElementById('drive-status').innerHTML = isLogin ? '✅ 已登入 Google' : '離線模式（尚未登入）';
+  document.getElementById('btn-auth').textContent = isLogin ? '登出' : 'Google 登入';
+  document.getElementById('btn-auth').onclick = isLogin ? signOut : authorize;
+}
+function gapiLoaded(){ gapi.load('client', async()=>{ await gapi.client.init({ discoveryDocs:['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] }); }); }
+function gisLoaded(){
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:GOOGLE_CLIENT_ID,
+    scope:SCOPES,
+    callback:(r)=>{
+      if(r&&r.access_token){ accessToken=r.access_token; gapi.client.setToken({access_token}); updateDriveStatus(true); }
+      else updateDriveStatus(false);
+    }
+  });
+}
+function authorize(){ tokenClient?.requestAccessToken({prompt:'consent'}); }
+function signOut(){ if(!accessToken)return; google.accounts.oauth2.revoke(accessToken,()=>{}); accessToken=null; gapi.client.setToken(null); updateDriveStatus(false); }
+
+// ====== 渲染 ======
+function render(){
+  const list=document.getElementById('list'); list.innerHTML="";
+  (state.data||[]).filter(item=>!state.filter || item.type===state.filter).forEach(item=>{
+    const card=document.createElement('div'); card.className="card";
+    card.innerHTML=`
+      <div class="font-bold">${item.question}</div>
+      <div class="mt-2">
+        ${genOptions(item).map((opt,i)=>`<div class="opt" data-ans="${opt.correct}">${String.fromCharCode(65+i)}. ${opt.text}</div>`).join("")}
+      </div>
+      <div class="mt-2 text-sm text-slate-600">正解：${item.answer||""}</div>
+      <div class="mt-1 text-sm">解析：${item.explain||""}</div>`;
+    list.appendChild(card);
+    card.querySelectorAll(".opt").forEach(el=>{
+      el.onclick=()=>{
+        el.classList.add(el.dataset.ans==="true"?"correct":"wrong");
+      };
+    });
+  });
+}
+function genOptions(item){
+  const correct={text:item.answer,correct:true};
+  const pool=["book","time","work","study","run","big","small","go"];
+  const wrongs=pool.filter(w=>w!==item.answer).sort(()=>.5-Math.random()).slice(0,3).map(w=>({text:w,correct:false}));
+  return [...wrongs,correct].sort(()=>.5-Math.random());
+}
+
+// ====== Tab & Btn Events ======
+document.getElementById("tab-grammar").onclick=()=>{state.filter="grammar";render();}
+document.getElementById("tab-collocations").onclick=()=>{state.filter="coll";render();}
+document.getElementById("tab-vocab").onclick=()=>{state.filter="vocab";render();}
+document.getElementById("btn-quick").onclick=()=>{ if(!state.filter){alert("請先選擇文法/片語/單字再使用快速翻");return;} render(); };
+document.getElementById("btn-quiz").onclick=()=>{ if(!state.filter){alert("請先選擇文法/片語/單字再使用測驗");return;} render(); };
+
+// 測試假資料
+state.data=[{type:"grammar",question:"I ___ a book yesterday.",answer:"read",explain:"過去式應用"}];
+render();
+updateDriveStatus(false);
+</script>
+</body>
+</html>
