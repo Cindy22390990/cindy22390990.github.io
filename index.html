@@ -42,8 +42,7 @@
   .card{background:#fff;border:1px solid #eef2f7;border-radius:16px;box-shadow:0 8px 18px rgba(15,23,42,.06);padding:1rem;margin:.5rem 0}
   .toolbar{position:sticky;top:calc(var(--safe-top) + 74px);z-index:30;background:#fff;border-bottom:1px solid #e5e7eb}
   .tap{-webkit-tap-highlight-color:transparent}
-  .hidden-hard{display:none!important}
-  .opt{display:flex;align-items:center;gap:10px;border:1px solid #e6eaf0;border-radius:12px;padding:14px 12px;cursor:pointer}
+  .opt{display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid #e6eaf0;border-radius:12px;padding:14px 12px;cursor:pointer;font-weight:800}
   .opt.active{border-color:var(--blue);background:var(--blue-100);color:var(--blue)}
   .opt.correct{border-color:#16a34a;background:#ecfdf5}
   .opt.wrong{border-color:#dc2626;background:#fef2f2}
@@ -61,7 +60,7 @@
 <body class="min-h-screen flex flex-col">
   <div class="safe-top"></div>
 
-  <!-- Header：預留靈動島安全區 -->
+  <!-- Header -->
   <header class="header">
     <div class="container-pad">
       <h1 class="text-2xl font-black leading-tight">📒 英文錯題本 <span class="text-slate-500 font-extrabold">（Drive 雲端）</span></h1>
@@ -78,7 +77,7 @@
     </div>
   </header>
 
-  <!-- 工具列：分類 / 模式 / 搜尋 -->
+  <!-- 工具列 -->
   <section class="toolbar">
     <div class="container-pad">
       <div class="mt-3 grid grid-cols-3 gap-3">
@@ -117,7 +116,7 @@
   <!-- 新增按鈕 -->
   <button id="btn-add" class="fab tap" aria-label="新增錯題">＋</button>
 
-  <!-- 新增/編輯 Sheet（含四欄位） -->
+  <!-- 新增/編輯 Sheet -->
   <div id="sheet" class="sheet">
     <div class="sheet-card">
       <div class="container-pad" style="padding-top:12px;padding-bottom:12px">
@@ -225,7 +224,6 @@ function parseImportArray(arr){
     const relatedHint = o['類題提醒']||o.relatedHint||'';
     const source = o['題目來源']||o.source||'';
     const tags = (o['標籤']||o.tags||'').toString().split(/[,，]/).map(s=>s.trim()).filter(Boolean);
-    // 若有提供「選項」就用；否則由系統產生
     const options = Array.isArray(o.options) ? o.options
                    : (o['選項'] ? o['選項'].toString().split(/[;；]/).map(s=>s.trim()).filter(Boolean) : []);
     return {
@@ -290,22 +288,17 @@ function computeFiltered(){
 }
 function escapeHTML(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[m])); }
 
-/* 依「正確答案」自動生成 ABCD  */
+/* 依「正確答案」自動生成 ABCD（介面僅顯示字母） */
 function generateDistractors(item){
   const base = new Set();
   const CA = (item.correctAnswer||'').trim();
   const WA = (item.wrongAnswer||'').trim();
   if(WA && WA.toLowerCase()!==CA.toLowerCase()) base.add(WA);
 
-  // 常見干擾池（不依子分類升級；維持簡單穩定）
-  const pool=['in','on','at','to','for','with','by','from','about','under','after','before','then','than','affect','effect','increase','decrease','big','small'];
+  const pool=['in','on','at','to','for','with','by','from','about','under','after','before','then','than','affect','effect','increase','decrease','big','small','through','throughout'];
   pool.forEach(x=>{ if(x.toLowerCase()!==CA.toLowerCase()) base.add(x); });
+  while(base.size<6) base.add(Math.random().toString(36).slice(2,6));
 
-  // 若仍不足，補一些一般詞
-  const extra=['book','time','work','study','go','take','form','from','through','throughout'];
-  while(base.size<6) base.add(extra[Math.floor(Math.random()*extra.length)]);
-
-  // 取三個 + 正解，洗牌成 4 個
   const wrongs=[...base].filter(x=>x.toLowerCase()!==CA.toLowerCase()).slice(0,3);
   const options=[...wrongs, CA].map((t)=>({text:String(t),correct:String(t).toLowerCase()===CA.toLowerCase()}));
   return options.sort(()=>Math.random()-.5).slice(0,4);
@@ -316,7 +309,6 @@ function cardEl(it){
   const categoryMap={'Grammar':'📝 文法','Collocations':'🔗 片語','Vocabulary':'💡 單字'};
   const created=new Date(it.createdAt||Date.now()).toLocaleDateString('zh-TW');
 
-  // 選項：若沒有 4 個，則自動生成
   const opts = (Array.isArray(it.options) && it.options.length===4) ? it.options
               : generateDistractors(it);
 
@@ -334,7 +326,7 @@ function cardEl(it){
 
     ${state.mode==='quiz' ? `
       <div class="space-y-2" data-quiz="${it.id}">
-        ${opts.map((o,i)=>`<button class="opt" data-ans="${o.correct}"><b>${'ABCD'[i]}.</b> <span>${escapeHTML(o.text)}</span></button>`).join('')}
+        ${opts.map((o,i)=>`<button class="opt" data-ans="${o.correct}"><b>${'ABCD'[i]}</b></button>`).join('')}
       </div>
       <div class="mt-3 hidden" id="qa-${it.id}">
         <div class="p-2 bg-green-50 border border-green-200 rounded-lg text-sm"><b class="text-green-700">✅ 正解</b>：${escapeHTML(it.correctAnswer||'')}</div>
@@ -360,7 +352,6 @@ function cardEl(it){
     </div>
   `;
 
-  // 測驗模式：點 ABCD
   if(state.mode==='quiz'){
     const box=el.querySelector(`[data-quiz="${it.id}"]`);
     box?.querySelectorAll('.opt').forEach(opt=>{
@@ -375,7 +366,6 @@ function cardEl(it){
     });
   }
 
-  // 一般行為
   el.querySelector('.js-edit').onclick=()=>openSheet(it);
   el.querySelector('.js-del').onclick=()=>delItem(it.id);
   el.querySelector('.js-review').onclick=()=>markReviewed(it.id,!it.isReviewed);
@@ -446,7 +436,7 @@ $("#form").onsubmit=(e)=>{
     relatedHint:$("#form-related").value.trim(),
     source:$("#form-source").value.trim(),
     tags:$("#form-tags").value.split(',').map(s=>s.trim()).filter(Boolean),
-    options:[], // 由系統自動產生
+    options:[], // 自動產生
     createdAt: existed?.createdAt || Date.now(),
     isReviewed: existed?.isReviewed || false,
     reviewCount: existed?.reviewCount || 0,
@@ -475,7 +465,6 @@ $("#search").addEventListener('input',()=>render());
 $("#btn-add").onclick=()=>openSheet();
 
 /* ============== Google Drive（appDataFolder 備份/還原） ============== */
-/* 將下列 Client ID 設為你的，並在 GCP「已授權的 JavaScript 來源」加上你的 GitHub Pages 網域 */
 const GOOGLE_CLIENT_ID='1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com';
 const SCOPES='https://www.googleapis.com/auth/drive.appdata';
 let tokenClient=null, accessToken=null, driveFileId=null;
@@ -485,6 +474,11 @@ function updateDriveStatus(isLogin){
   $("#btn-auth").textContent = isLogin ? '登出' : 'Google 登入';
   $("#btn-auth").onclick = isLogin ? signOut : authorize;
 }
+function refreshLoginUI(){
+  const tk = (typeof gapi!=='undefined' && gapi.client && gapi.client.getToken) ? gapi.client.getToken() : null;
+  const logged = !!(accessToken || (tk && tk.access_token));
+  updateDriveStatus(logged);
+}
 async function ensureGapi(){
   return new Promise(resolve=>{ gapi.load('client', async()=>{ await gapi.client.init({ discoveryDocs:['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] }); resolve(); }); });
 }
@@ -493,21 +487,23 @@ function ensureGis(){
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id:GOOGLE_CLIENT_ID, scope:SCOPES,
     callback:(r)=>{
-      if(r && r.access_token){ accessToken=r.access_token; gapi.client.setToken({access_token}); updateDriveStatus(true); findBackupFile(); }
-      else { updateDriveStatus(false); }
+      if(r && r.access_token){
+        accessToken=r.access_token; gapi.client.setToken({access_token});
+      }
+      refreshLoginUI(); findBackupFile();
     }
   });
 }
 async function authorize(){ if(typeof gapi==='undefined' || typeof google==='undefined'){ toast('Google 服務載入中…'); return; } await ensureGapi(); ensureGis(); tokenClient.requestAccessToken({prompt:'consent'}); }
-function signOut(){ if(!accessToken) return; google.accounts.oauth2.revoke(accessToken,()=>{}); accessToken=null; driveFileId=null; gapi.client.setToken(null); updateDriveStatus(false); }
+function signOut(){ if(!accessToken && !(gapi.client.getToken&&gapi.client.getToken()?.access_token)) return; const tk=gapi.client.getToken?.(); const t=accessToken||tk?.access_token; if(t) google.accounts.oauth2.revoke(t,()=>{}); accessToken=null; driveFileId=null; gapi.client.setToken(null); refreshLoginUI(); }
 async function findBackupFile(){
   try{
     const resp=await gapi.client.drive.files.list({ spaces:'appDataFolder', q:"name='english_mistakes_v2.json'", fields:'files(id, modifiedTime)' });
     driveFileId=(resp.result.files && resp.result.files[0]?.id) || null;
-  }catch(e){ console.warn('列出備份失敗',e); }
+  }catch(e){ /* ignore */ }
 }
 $("#btn-backup").onclick=async()=>{
-  if(!accessToken){ alert('請先 Google 登入'); return; }
+  const tk=gapi.client.getToken?.(); if(!accessToken && !(tk&&tk.access_token)){ alert('請先 Google 登入'); return; }
   $("#loading").classList.add('show');
   try{
     const data=JSON.stringify(state.data||[],null,2);
@@ -525,7 +521,7 @@ $("#btn-backup").onclick=async()=>{
   finally{ $("#loading").classList.remove('show'); }
 };
 $("#btn-restore").onclick=async()=>{
-  if(!accessToken){ alert('請先 Google 登入'); return; }
+  const tk=gapi.client.getToken?.(); if(!accessToken && !(tk&&tk.access_token)){ alert('請先 Google 登入'); return; }
   if(!driveFileId){ await findBackupFile(); }
   if(!driveFileId){ alert('雲端尚無備份，請先備份一次'); return; }
   $("#loading").classList.add('show');
@@ -539,8 +535,9 @@ $("#btn-restore").onclick=async()=>{
 };
 
 /* ============== 啟動 ============== */
-loadLocal(); render(); updateDriveStatus(false);
-if(typeof gapi!=='undefined'){ ensureGapi(); }
+loadLocal(); render(); refreshLoginUI();
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') refreshLoginUI(); });
+if(typeof gapi!=='undefined'){ ensureGapi().then(refreshLoginUI); }
 if(typeof google!=='undefined'){ ensureGis(); }
 </script>
 </body>
