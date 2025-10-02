@@ -290,33 +290,24 @@ function computeFiltered(){
 }
 function escapeHTML(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[m])); }
 
+/* 依「正確答案」自動生成 ABCD  */
 function generateDistractors(item){
   const base = new Set();
   const CA = (item.correctAnswer||'').trim();
   const WA = (item.wrongAnswer||'').trim();
   if(WA && WA.toLowerCase()!==CA.toLowerCase()) base.add(WA);
 
-  // 依子分類給常見干擾
-  const lib={
-    Grammar:['in','on','at','to','for','since','because','although','despite','affect','effect'],
-    Collocations:['make','do','take','have','pay','give','by','with','for','in','on'],
-    Vocabulary:['increase','decrease','improve','reduce','accept','except','affect','effect','practical','practically']
-  };
-  (lib[item.category]||[]).forEach(x=>{ if(x.toLowerCase()!==CA.toLowerCase()) base.add(x); });
+  // 常見干擾池（不依子分類升級；維持簡單穩定）
+  const pool=['in','on','at','to','for','with','by','from','about','under','after','before','then','than','affect','effect','increase','decrease','big','small'];
+  pool.forEach(x=>{ if(x.toLowerCase()!==CA.toLowerCase()) base.add(x); });
 
-  // 再加上一些變形/大小寫/單複數嘗試
-  if(CA){
-    const variants=[CA.toUpperCase(), CA.toLowerCase(), CA+'s', CA.replace(/s$/,'')];
-    variants.forEach(v=>{ if(v && v.toLowerCase()!==CA.toLowerCase()) base.add(v); });
-  }
+  // 若仍不足，補一些一般詞
+  const extra=['book','time','work','study','go','take','form','from','through','throughout'];
+  while(base.size<6) base.add(extra[Math.floor(Math.random()*extra.length)]);
 
-  // 若仍不足，補通用池
-  const pool=['book','time','work','study','run','big','small','go','take','form','from','then','than','through','throughout','in','on','at'];
-  while(base.size<6) base.add(pool[Math.floor(Math.random()*pool.length)]);
-
-  // 取三個 + 正解，然後洗牌
+  // 取三個 + 正解，洗牌成 4 個
   const wrongs=[...base].filter(x=>x.toLowerCase()!==CA.toLowerCase()).slice(0,3);
-  const options=[...wrongs, CA].map((t,i)=>({text:String(t),correct:String(t).toLowerCase()===CA.toLowerCase()}));
+  const options=[...wrongs, CA].map((t)=>({text:String(t),correct:String(t).toLowerCase()===CA.toLowerCase()}));
   return options.sort(()=>Math.random()-.5).slice(0,4);
 }
 
@@ -483,8 +474,9 @@ $("#search").addEventListener('input',()=>render());
 
 $("#btn-add").onclick=()=>openSheet();
 
-/* ============== Google Drive（可選） ============== */
-const GOOGLE_CLIENT_ID='1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com'; // ← 改成你的
+/* ============== Google Drive（appDataFolder 備份/還原） ============== */
+/* 將下列 Client ID 設為你的，並在 GCP「已授權的 JavaScript 來源」加上你的 GitHub Pages 網域 */
+const GOOGLE_CLIENT_ID='1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com';
 const SCOPES='https://www.googleapis.com/auth/drive.appdata';
 let tokenClient=null, accessToken=null, driveFileId=null;
 
