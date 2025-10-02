@@ -116,11 +116,14 @@
 
   <!-- loading -->
   <div id="loading" class="hidden"><div class="text-center"><div class="animate-spin h-12 w-12 border-b-2 border-blue-600 rounded-full mx-auto"></div><div>同步中…</div></div></div>
-<script>
+  <script>
 /* ========= 狀態 ========= */
-const $=s=>document.querySelector(s);const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
-const LS_KEY='eng_error_cards_v2';let state={cat:'Grammar',mode:'list',data:[],filtered:[]};
-let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAnswer','correctAnswer','correctOption','subtopic','analysis','mnemonic','tags','createdAt','isReviewed','reviewCount','lastReviewed','heart','wrongCount','分類','Category']);
+const $=s=>document.querySelector(s);
+const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+const LS_KEY='eng_error_cards_v2';
+let state={cat:'Grammar',mode:'list',data:[],filtered:[]};
+let EXTRA_FIELDS=[];
+const BASE_KEYS=new Set(['id','category','question','wrongAnswer','correctAnswer','correctOption','subtopic','analysis','mnemonic','tags','createdAt','isReviewed','reviewCount','lastReviewed','heart','wrongCount','分類','Category']);
 
 /* ========= 匯入（CSV / JSON） ========= */
 (function setupFileImport(){
@@ -131,10 +134,9 @@ let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAn
   btn.onclick=()=>input.click();
 
   function parseCSV(text){
-    const lines = String(text).replace(/\r\n/g,'\n').replace(/\r/g,'\n')
-      .split('\n').filter(l=>l.trim().length>0);
+    const lines=String(text).replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim().length>0);
     if(lines.length===0) return {headers:[], rows:[]};
-    const parseLine = (line)=>{
+    const parseLine=(line)=>{
       const out=[]; let cur=''; let inQ=false;
       for(let i=0;i<line.length;i++){
         const ch=line[i];
@@ -148,19 +150,18 @@ let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAn
           else cur+=ch;
         }
       }
-      out.push(cur);
-      return out;
+      out.push(cur); return out;
     };
-    const headers = parseLine(lines[0]).map(h=>h.replace(/^\uFEFF/,'').trim());
-    const rows = lines.slice(1).map(l=>parseLine(l)).map(arr=>{
+    const headers=parseLine(lines[0]).map(h=>h.replace(/^\uFEFF/,'').trim());
+    const rows=lines.slice(1).map(l=>parseLine(l)).map(arr=>{
       const obj={}; headers.forEach((h,idx)=>{ obj[h]=arr[idx]??''; }); return obj;
     });
     return {headers, rows};
   }
 
   function deduceExtraFieldsFromHeaders(headers){
-    const set = headers.filter(h=>h && !BASE_KEYS.has(h));
-    EXTRA_FIELDS = Array.from(new Set(set));
+    const set=headers.filter(h=>h && !BASE_KEYS.has(h));
+    EXTRA_FIELDS=Array.from(new Set(set));
   }
 
   input.onchange=e=>{
@@ -171,10 +172,10 @@ let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAn
         const name=(f.name||'').toLowerCase();
         let imported=[];
         if(name.endsWith('.csv') || name.endsWith('.txt')){
-          const {headers, rows} = parseCSV(r.result);
+          const {headers, rows}=parseCSV(r.result);
           if(headers.length===0) throw new Error('CSV 無標題列或格式錯誤');
           deduceExtraFieldsFromHeaders(headers);
-          imported = rows.map(row=>{
+          imported=rows.map(row=>{
             const obj={
               id: uid(),
               category: normalizeCategory(row['分類']||row['category']||row['Category']) || state.cat,
@@ -196,9 +197,9 @@ let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAn
         }else{ // JSON
           const arr=JSON.parse(r.result);
           if(!Array.isArray(arr)) throw new Error('JSON 應為陣列');
-          const headers = Array.from(new Set(arr.flatMap(o=>Object.keys(o||{}))));
+          const headers=Array.from(new Set(arr.flatMap(o=>Object.keys(o||{}))));
           deduceExtraFieldsFromHeaders(headers);
-          imported = arr.map(src=>{
+          imported=arr.map(src=>{
             const obj={
               id: src.id||uid(),
               category: normalizeCategory(src.category || src['分類'] || src['Category']) || state.cat,
@@ -219,7 +220,6 @@ let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAn
             return obj;
           });
         }
-
         // 合併去重
         const key=o=> JSON.stringify([o.category, o.question, o.correctAnswer, ...EXTRA_FIELDS.map(k=> ((o.extra||{})[k] || ''))]);
         const map=new Map(state.data.map(o=>[key(o),o]));
@@ -229,9 +229,7 @@ let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAn
       }catch(err){
         console.error(err);
         alert('匯入失敗：'+err.message);
-      }finally{
-        input.value='';
-      }
+      }finally{ input.value=''; }
     };
     r.readAsText(f);
   };
@@ -239,21 +237,18 @@ let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAn
 
 /* ========= 匯出（CSV / JSON） ========= */
 (function setupFileExport(){
-  const btn = document.getElementById('btn-export-file');
+  const btn=document.getElementById('btn-export-file');
   if(!btn) return;
 
   function unionExtraKeys(data){
-    const set = new Set();
-    (data||[]).forEach(it=>{
-      Object.keys(it.extra||{}).forEach(k=>set.add(k));
-    });
+    const set=new Set();
+    (data||[]).forEach(it=>{ Object.keys(it.extra||{}).forEach(k=>set.add(k)); });
     return Array.from(set);
   }
-
   function toRows(data){
-    const extras = unionExtraKeys(data);
-    const rows = (data||[]).map(it=>{
-      const base = {
+    const extras=unionExtraKeys(data);
+    const rows=(data||[]).map(it=>{
+      const base={
         '分類': it.category||'',
         '題幹': it.question||'',
         '你的答案': it.wrongAnswer||'',
@@ -262,47 +257,37 @@ let EXTRA_FIELDS=[];const BASE_KEYS=new Set(['id','category','question','wrongAn
         '子分類': it.subtopic||'',
         '錯因分析': it.analysis||'',
         '記憶口訣': it.mnemonic||'',
-        '標籤': Array.isArray(it.tags) ? it.tags.join(', ') : (it.tags||''),
+        '標籤': Array.isArray(it.tags)? it.tags.join(', '):(it.tags||''),
       };
-      const out = {...base};
-      const ex = it.extra||{};
-      extras.forEach(k=>{ out[k] = ex[k] ?? ''; });
+      const out={...base};
+      const ex=it.extra||{};
+      extras.forEach(k=>{ out[k]=ex[k]??''; });
       return out;
     });
     return {rows, extras};
   }
-
   function toCSV(rows){
     if(!rows.length) return '';
-    const headers = Object.keys(rows[0]);
-    const esc = s => ('"'+ String(s).replace(/"/g,'""') +'"');
-    const head = headers.map(esc).join(',');
-    const body = rows.map(r=> headers.map(h=>esc(r[h]??'')).join(',')).join('\n');
+    const headers=Object.keys(rows[0]);
+    const esc=s=>('"'+String(s).replace(/"/g,'""')+'"');
+    const head=headers.map(esc).join(',');
+    const body=rows.map(r=>headers.map(h=>esc(r[h]??'')).join(',')).join('\n');
     return head+'\n'+body;
   }
-
   function download(filename, blob){
     const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download=filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    a.href=URL.createObjectURL(blob); a.download=filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500);
   }
 
-  btn.onclick = ()=>{
-    const data = state.data||[];
-    const safe = data.map(o=>({...o, extra: o.extra||{}}));
-    const {rows} = toRows(safe);
-
-    // 匯出 CSV（UTF-8 BOM，Excel 友善）
-    const csv = toCSV(rows);
-    const csvBlob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
-    download('英文錯題本_匯出.csv', csvBlob);
-
-    // 匯出 JSON
-    const jsonBlob = new Blob([JSON.stringify(rows, null, 2)], {type:'application/json;charset=utf-8'});
-    download('英文錯題本_匯出.json', jsonBlob);
+  btn.onclick=()=>{
+    const data=state.data||[];
+    const safe=data.map(o=>({...o, extra:o.extra||{}}));
+    const {rows}=toRows(safe);
+    const csv=toCSV(rows);
+    download('英文錯題本_匯出.csv', new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'}));
+    download('英文錯題本_匯出.json', new Blob([JSON.stringify(rows,null,2)], {type:'application/json;charset=utf-8'}));
   };
 })();
 
@@ -318,64 +303,81 @@ function normalizeCategory(raw){
   if(['單字','vocab','vocabulary','word','words','v'].includes(s)) return 'Vocabulary';
   return null;
 }
-/* ========= UI 渲染 ========= */
+
+/* ========= 額外欄位渲染/收集 & 安全字串 ========= */
+function escapeHTML(s){return (s==null?'':String(s)).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]))}
+
+function renderExtraFields(container, it){
+  container.innerHTML='';
+  const extra=it?.extra||{};
+  const longHints=['題幹','題目','解析','錯因','記憶','備註','例句','句子','說明'];
+  const isLong=name=>longHints.some(h=>name.toLowerCase().includes(h.toLowerCase()));
+  (EXTRA_FIELDS||[]).forEach(name=>{
+    const id='extra-'+name.replace(/[^\w\-]/g,'_');
+    const label=`<label class="text-sm text-slate-600">${escapeHTML(name)}</label>`;
+    if(isLong(name)){
+      container.insertAdjacentHTML('beforeend', `
+        <div>${label}
+          <textarea data-extra-key="${escapeHTML(name)}" id="${id}" rows="3" class="w-full border rounded-xl px-3 py-2"></textarea>
+        </div>`);
+    }else{
+      container.insertAdjacentHTML('beforeend', `
+        <div>${label}
+          <input data-extra-key="${escapeHTML(name)}" id="${id}" class="w-full border rounded-xl px-3 py-2" />
+        </div>`);
+    }
+    const el=document.getElementById(id); if(el) el.value=extra[name]??'';
+  });
+}
+function collectExtra(){
+  const out={};
+  document.querySelectorAll('#extra-fields [data-extra-key]').forEach(el=>{
+    out[el.getAttribute('data-extra-key')]=(el.value||'').trim();
+  });
+  return out;
+}
+    /* ========= UI 渲染 ========= */
 function computeFiltered(){
   const q=$('#search').value.trim().toLowerCase();
-  state.filtered = (state.data||[])
-    .filter(d=> (d.category||'Grammar')===state.cat)
+  state.filtered=(state.data||[])
+    .filter(d=>(d.category||'Grammar')===state.cat)
     .filter(d=>{
       if(!q) return true;
-      const extra = d.extra||{};
-      const extraBlob = Object.entries(extra).map(([k,v])=>`${k} ${v}`).join(' ');
-      const blob=[
-        d.question,d.wrongAnswer,d.correctAnswer,d.analysis,d.mnemonic,
-        (d.tags||[]).join(','),(d.subtopic||''), extraBlob
-      ].join(' ').toLowerCase();
+      const extra=d.extra||{};
+      const extraBlob=Object.entries(extra).map(([k,v])=>`${k} ${v}`).join(' ');
+      const blob=[d.question,d.wrongAnswer,d.correctAnswer,d.analysis,d.mnemonic,(d.tags||[]).join(','),(d.subtopic||''),extraBlob].join(' ').toLowerCase();
       return blob.includes(q);
     })
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 }
-
 function setMode(m){
   state.mode=m;
   document.getElementById('btn-quick').classList.toggle('btn-primary', m==='list');
   document.getElementById('btn-quiz').classList.toggle('btn-primary', m==='quiz');
   render();
 }
-
 function renderTabs(){
-  document.getElementById('count-grammar').textContent =
-    (state.data||[]).filter(d=> (d.category||'Grammar')==='Grammar').length;
-  document.getElementById('count-coll').textContent =
-    (state.data||[]).filter(d=> (d.category||'Grammar')==='Collocations').length;
-  document.getElementById('count-vocab').textContent =
-    (state.data||[]).filter(d=> (d.category||'Grammar')==='Vocabulary').length;
+  document.getElementById('count-grammar').textContent=(state.data||[]).filter(d=>(d.category||'Grammar')==='Grammar').length;
+  document.getElementById('count-coll').textContent=(state.data||[]).filter(d=>(d.category||'Grammar')==='Collocations').length;
+  document.getElementById('count-vocab').textContent=(state.data||[]).filter(d=>(d.category||'Grammar')==='Vocabulary').length;
 }
-
 function showStat(kind){
-  const box = (state.data||[]).filter(d=> (d.category||'Grammar')==={
-    grammar:'Grammar',coll:'Collocations',vocab:'Vocabulary'}[kind]);
-  const pairs = Object.entries(box.reduce((m,it)=>{
-    const k=(it.subtopic||'未標註').trim()||'未標註';
-    m[k]=(m[k]||0)+(it.wrongCount||0); return m;
-  },{})).sort((a,b)=>b[1]-a[1]);
-  alert(`常錯統計（${{grammar:'文法',coll:'片語',vocab:'單字'}[kind]}）\n\n`+(pairs.length? pairs.map(([k,v])=>`${k}：${v}`).join('\n'):'目前沒有統計資料'));
+  const box=(state.data||[]).filter(d=>(d.category||'Grammar')==={grammar:'Grammar',coll:'Collocations',vocab:'Vocabulary'}[kind]);
+  const pairs=Object.entries(box.reduce((m,it)=>{const k=(it.subtopic||'未標註').trim()||'未標註'; m[k]=(m[k]||0)+(it.wrongCount||0); return m;},{})).sort((a,b)=>b[1]-a[1]);
+  alert(`常錯統計（${{grammar:'文法',coll:'片語',vocab:'單字'}[kind]}）\n\n`+(pairs.length?pairs.map(([k,v])=>`${k}：${v}`).join('\n'):'目前沒有統計資料'));
 }
-
-function escapeHTML(s){return (s==null?'':String(s)).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]))}
-
-/* ========= CRUD & 卡片渲染 ========= */
 function cardEl(it){
-  const wrap=document.createElement('div');
-  wrap.className='card p-4';
+  const wrap=document.createElement('div'); wrap.className='card p-4';
   const topL={'Grammar':'📝 文法','Collocations':'🔗 片語','Vocabulary':'💡 單字'}[it.category]||'📄';
-
+  const kvHtml=(EXTRA_FIELDS||[]).map(k=>{const v=(it.extra||{})[k]; if(v==null||v==='') return ''; return `<div class="k">${escapeHTML(k)}</div><div class="v">${escapeHTML(String(v))}</div>`;}).join('');
+  const kvBlock=kvHtml?`<div class="kv mb-2">${kvHtml}</div>`:'';
   wrap.innerHTML=`
     <div class="flex items-center justify-between mb-1">
       <div class="text-sm text-blue-600 font-semibold">${topL}</div>
       <div class="text-xs text-slate-400">${new Date(it.createdAt||Date.now()).toLocaleDateString()}</div>
     </div>
     <h3 class="font-extrabold text-slate-900 mb-2">${escapeHTML(it.question||'')}</h3>
+    ${kvBlock}
     <div class="grid grid-cols-2 gap-2 text-sm mb-2">
       <div class="p-2 bg-red-50 border border-red-200 rounded-lg">❌ ${escapeHTML(it.wrongAnswer||'')}</div>
       <div class="p-2 bg-green-50 border border-green-200 rounded-lg">✅ ${escapeHTML(it.correctAnswer||'')}</div>
@@ -395,15 +397,23 @@ function render(){
   if(state.filtered.length===0){ document.getElementById('empty').classList.remove('hidden-hard'); }
   else { document.getElementById('empty').classList.add('hidden-hard'); state.filtered.forEach(it=>host.appendChild(cardEl(it))); }
 }
+
+/* ========= CRUD ========= */
 function openSheet(it=null){
   document.getElementById('sheet').classList.add('show');
   document.getElementById('sheet-title').textContent=it?'編輯錯題':'新增錯題';
   document.getElementById('btn-delete').classList.toggle('hidden-hard',!it);
   document.getElementById('form-id').value=it?.id||'';
+  document.getElementById('form-category').value=it?.category||state.cat;
   document.getElementById('form-question').value=it?.question||'';
   document.getElementById('form-wrong').value=it?.wrongAnswer||'';
   document.getElementById('form-correct').value=it?.correctAnswer||'';
   document.getElementById('form-correctOpt').value=it?.correctOption||'';
+  document.getElementById('form-subtopic').value=it?.subtopic||'';
+  document.getElementById('form-analysis').value=it?.analysis||'';
+  document.getElementById('form-mnemonic').value=it?.mnemonic||'';
+  document.getElementById('form-tags').value=(it?.tags||[]).join(', ');
+  renderExtraFields(document.getElementById('extra-fields'), it);
 }
 function closeSheet(){ document.getElementById('sheet').classList.remove('show'); }
 function upsertLocal(obj){ const i=(state.data||[]).findIndex(d=>d.id===obj.id); if(i>=0) state.data[i]=obj; else state.data.unshift(obj); saveLocal(); render(); }
@@ -416,18 +426,22 @@ document.getElementById('form').onsubmit=(e)=>{
   const existed=(state.data||[]).find(d=>d.id===id);
   const obj={
     id,
-    category: state.cat,
+    category: document.getElementById('form-category').value,
     question: document.getElementById('form-question').value.trim(),
     wrongAnswer: document.getElementById('form-wrong').value.trim(),
     correctAnswer: document.getElementById('form-correct').value.trim(),
     correctOption: (document.getElementById('form-correctOpt').value||'').trim().toUpperCase(),
+    subtopic: document.getElementById('form-subtopic').value.trim(),
+    analysis: document.getElementById('form-analysis').value.trim(),
+    mnemonic: document.getElementById('form-mnemonic').value.trim(),
+    tags: document.getElementById('form-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
     createdAt: existed? existed.createdAt:Date.now(),
     isReviewed: existed?!!existed.isReviewed:false,
     reviewCount: existed?(existed.reviewCount||0):0,
     lastReviewed: existed?(existed.lastReviewed||0):0,
     heart: existed?(existed.heart||0):0,
     wrongCount: existed?(existed.wrongCount||0):0,
-    extra: existed?existed.extra||{}:{}
+    extra: collectExtra()
   };
   upsertLocal(obj); closeSheet();
 };
@@ -441,25 +455,121 @@ document.getElementById('btn-quiz').onclick=()=>setMode('quiz');
 document.getElementById('search').oninput=()=>render();
 document.getElementById('btn-add').onclick=()=>openSheet();
 document.getElementById('sheet').addEventListener('click',e=>{ if(e.target.id==='sheet') closeSheet(); });
+document.getElementById('sheet-close').onclick=()=>closeSheet();          // ★ 修正：關閉鍵確實綁定
 document.getElementById('btn-delete').onclick=()=>{ const id=document.getElementById('form-id').value; if(id){ closeSheet(); delItem(id); } };
 
-/* ========= Google Drive & 啟動 ========= */
+/* ========= Google Drive（appDataFolder） ========= */
+/* 將下行換成你自己的 OAuth Client ID，並在 GCP 的 Authorized JavaScript origins 加上你的網域 */
 const GOOGLE_CLIENT_ID='1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com';
 const SCOPES='https://www.googleapis.com/auth/drive.appdata';
 let tokenClient=null,accessToken=null,driveFileId=null;
 
-function updateDriveStatus(isLogin){ document.getElementById('drive-status').innerHTML=isLogin?'✅ 已登入 Google':'離線模式（尚未登入）'; }
+function updateDriveStatus(isLogin){
+  document.getElementById('drive-status').innerHTML = isLogin ? '✅ 已登入 Google' : '離線模式（尚未登入）';
+  document.getElementById('btn-auth').textContent = isLogin ? '登出' : 'Google 登入';
+  document.getElementById('btn-auth').onclick = isLogin ? signOut : authorize;
+}
 function gapiLoaded(){ gapi.load('client', async()=>{ await gapi.client.init({ discoveryDocs:['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] }); }); }
-function gisLoaded(){ tokenClient=google.accounts.oauth2.initTokenClient({ client_id:GOOGLE_CLIENT_ID, scope:SCOPES, callback:(r)=>{ if(r&&r.access_token){ accessToken=r.access_token; gapi.client.setToken({access_token}); updateDriveStatus(true);}else updateDriveStatus(false); } }); }
+function gisLoaded(){
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:GOOGLE_CLIENT_ID,
+    scope:SCOPES,
+    callback:(r)=>{
+      if(r&&r.access_token){
+        accessToken=r.access_token;
+        gapi.client.setToken({access_token});
+        updateDriveStatus(true);
+        findBackupFile();
+      }else{
+        updateDriveStatus(false);
+      }
+    }
+  });
+}
 function authorize(){ tokenClient?.requestAccessToken({prompt:'consent'}); }
-function signOut(){ if(accessToken){ google.accounts.oauth2.revoke(accessToken,()=>{}); accessToken=null; updateDriveStatus(false);} }
+function signOut(){
+  if(!accessToken) return;
+  google.accounts.oauth2.revoke(accessToken,()=>{});
+  accessToken=null; driveFileId=null; gapi.client.setToken(null);
+  updateDriveStatus(false);
+}
+async function findBackupFile(){
+  try{
+    const resp=await gapi.client.drive.files.list({
+      spaces:'appDataFolder',
+      q:"name='english_mistakes_v2.json'",
+      fields:'files(id, name, modifiedTime)'
+    });
+    driveFileId=(resp.result.files && resp.result.files[0]?.id) || null;
+  }catch(e){ console.warn('列檔失敗',e); }
+}
+async function backupToDrive(){
+  if(!accessToken){ alert('請先 Google 登入'); return; }
+  document.getElementById('loading').classList.remove('hidden');
+  try{
+    const data=JSON.stringify(state.data||[],null,2);
+    if(driveFileId){
+      await gapi.client.request({
+        path:`/upload/drive/v3/files/${driveFileId}`,
+        method:'PATCH',
+        params:{uploadType:'media'},
+        headers:{'Content-Type':'application/json'},
+        body:data
+      });
+    }else{
+      const meta={ name:'english_mistakes_v2.json', parents:['appDataFolder'] };
+      const boundary='foo_bar_'+Math.random().toString(36).slice(2);
+      const body=`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`+
+        JSON.stringify(meta)+
+        `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n`+
+        data+`\r\n--${boundary}--`;
+      const res=await gapi.client.request({
+        path:'/upload/drive/v3/files?uploadType=multipart',
+        method:'POST',
+        headers:{'Content-Type':`multipart/related; boundary=${boundary}`},
+        body
+      });
+      driveFileId=res.result.id;
+    }
+    alert('✅ 備份成功');
+  }catch(e){
+    console.error(e);
+    alert('備份失敗：請確認已啟用 Drive API 並設定正確的 Authorized JavaScript origins。');
+  }finally{ document.getElementById('loading').classList.add('hidden'); }
+}
+async function restoreFromDrive(){
+  if(!accessToken){ alert('請先 Google 登入'); return; }
+  if(!driveFileId){ await findBackupFile(); }
+  if(!driveFileId){ alert('雲端尚無備份，請先備份一次'); return; }
+  document.getElementById('loading').classList.remove('hidden');
+  try{
+    const res=await gapi.client.drive.files.get({ fileId:driveFileId, alt:'media' });
+    const arr=Array.isArray(res.result)?res.result:[];
+    state.data=(arr||[]).map(o=>({...o, extra:o.extra||{}})); // 防守：補 extra
+    saveLocal(); render();
+    alert('✅ 還原成功');
+  }catch(e){
+    console.error(e);
+    alert('還原失敗：請檢查權限或網路');
+  }finally{ document.getElementById('loading').classList.add('hidden'); }
+}
+// 綁定備份/還原
+document.getElementById('btn-backup').onclick=backupToDrive;
+document.getElementById('btn-restore').onclick=restoreFromDrive;
 
-document.getElementById('btn-auth').onclick=authorize;
-document.getElementById('btn-backup').onclick=()=>alert('備份功能示範');
-document.getElementById('btn-restore').onclick=()=>alert('還原功能示範');
-
-window.addEventListener('error',e=>{ console.error(e.error||e.message); document.getElementById('loading').classList.add('hidden'); });
-loadLocal(); render(); updateDriveStatus(false);
+/* ========= 啟動 ========= */
+window.addEventListener('error', e=>{
+  console.error(e.error||e.message);
+  document.getElementById('loading').classList.add('hidden');
+});
+loadLocal();
+// 舊資料遷移：補 extra 欄
+try{ state.data=(state.data||[]).map(o=>({...o, extra:o.extra||{}})); saveLocal(); }catch{}
+render();
+updateDriveStatus(false);
+// 若 SDK 已在快取先載入，嘗試觸發
+if(typeof gapi!=='undefined'){ try{ gapiLoaded(); }catch{} }
+if(typeof google!=='undefined'){ try{ gisLoaded(); }catch{} }
 </script>
 </body>
 </html>
