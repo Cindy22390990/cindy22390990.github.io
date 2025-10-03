@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>📒 英文錯題本（Drive 雲端）</title>
+<meta name="theme-color" content="#2563eb" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap" rel="stylesheet" />
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+  :root{
+    --blue:#2563eb;
+    --blue-100:#eef4ff;
+    --safe-top:max(env(safe-area-inset-top),28px);
+    --safe-side:max(env(safe-area-inset-left),16px);
+  }
+  html,body{height:100%}
+  body{
+    font-family:'Inter',system-ui,-apple-system,'SF Pro Text','PingFang TC','Noto Sans TC','Microsoft JhengHei',sans-serif;
+    background:#f7f9fc;color:#0f172a;
+  }
+  .safe-top{height:var(--safe-top)}
+  .container-pad{padding-left:calc(var(--safe-side) + 16px);padding-right:calc(var(--safe-side) + 16px)}
+  .header{position:sticky;top:0;z-index:40;background:#fff;border-bottom:1px solid #e5e7eb;backdrop-filter:blur(6px)}
+  .btn{border-radius:14px;font-weight:800;padding:.65rem 1rem;background:#eef2f7;color:#334155;transition:.06s transform,.06s color,.06s background}
+  .btn:active{transform:scale(.98);color:var(--blue)}
+  .btn-lg{min-height:52px}
+  .btn-primary{background:#2563eb;color:#fff}
+  .btn-blue{background:var(--blue-100);color:var(--blue);border:1px solid #cfe0ff}
+  .btn-active{background:var(--blue-100)!important;color:var(--blue)!important}
+  .pill{font-size:12px;border-radius:9999px;padding:.125rem .5rem}
+  .badge{font-size:12px;background:#f1f5f9;color:#64748b;border-radius:10px;padding:.1rem .45rem}
+  .card{background:#fff;border:1px solid #eef2f7;border-radius:16px;box-shadow:0 8px 18px rgba(15,23,42,.06);padding:1rem;margin:.5rem 0}
+  .toolbar{position:sticky;top:calc(var(--safe-top) + 74px);z-index:30;background:#fff;border-bottom:1px solid #e5e7eb}
+  .tap{-webkit-tap-highlight-color:transparent}
+  .hidden-hard{display:none!important}
+  .opt{display:flex;align-items:center;gap:10px;border:1px solid #e6eaf0;border-radius:12px;padding:14px 12px;cursor:pointer}
+  .opt.active{border-color:var(--blue);background:var(--blue-100);color:var(--blue)}
+  .opt.correct{border-color:#16a34a;background:#ecfdf5}
+  .opt.wrong{border-color:#dc2626;background:#fef2f2}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:88px;z-index:60;background:#111827;color:#fff;border-radius:9999px;padding:.5rem .9rem;font-size:14px;display:none}
+  .toast.show{display:block}
+  #loading{position:fixed;inset:0;background:rgba(255,255,255,.78);display:none;align-items:center;justify-content:center;z-index:100}
+  #loading.show{display:flex}
+  .fab{position:fixed;right:calc(var(--safe-side) + 18px);bottom:calc(env(safe-area-inset-bottom) + 18px);width:64px;height:64px;border-radius:9999px;background:var(--blue);color:#fff;font-size:28px;font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 28px rgba(37,99,235,.35);z-index:35}
+  .sheet{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:end;z-index:50}
+  .sheet.show{display:flex}
+  .sheet-card{background:#fff;border-top-left-radius:18px;border-top-right-radius:18px;width:100%}
+  .muted{color:#64748b}
+</style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+  <div class="safe-top"></div>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="container-pad">
+      <h1 class="text-2xl font-black leading-tight">📒 英文錯題本 <span class="text-slate-500 font-extrabold">（Drive 雲端）</span></h1>
+      <div id="drive-status" class="text-xs text-slate-500 mt-1">離線模式（尚未登入）</div>
+      <div class="flex flex-wrap gap-3 pb-3 mt-2">
+        <button id="btn-auth" class="btn btn-lg btn-primary tap">Google 登入</button>
+        <button id="btn-backup" class="btn btn-lg btn-blue tap">備份</button>
+        <button id="btn-restore" class="btn btn-lg btn-blue tap">還原</button>
+
+        <label class="btn tap">
+          匯入（檔案）<input id="file-import" type="file" accept=".json" class="hidden" />
+        </label>
+        <button id="btn-export-file" class="btn tap">匯出（檔案）</button>
+
+        <!-- 非測驗時可新增 -->
+        <button id="btn-add-top" class="btn tap">新增一題</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 工具列 -->
+  <section class="toolbar">
+    <div class="container-pad">
+      <div class="mt-3 grid grid-cols-4 gap-3">
+        <button id="tab-all" class="btn tap">📚 綜合測驗</button>
+        <button id="tab-grammar" class="btn tap">📝 文法</button>
+        <button id="tab-collocations" class="btn tap">🔗 片語</button>
+        <button id="tab-vocab" class="btn tap">💡 單字</button>
+      </div>
+
+      <div class="mt-3 grid grid-cols-2 gap-3">
+        <button id="mode-list" class="btn tap">📋 快速翻</button>
+        <button id="mode-quiz" class="btn tap">📝 測驗</button>
+      </div>
+
+      <div class="mt-3 grid grid-cols-[1fr_auto_auto] gap-2">
+        <div class="relative">
+          <input id="search" type="search" placeholder="搜尋題幹/標籤/子分類"
+                 class="w-full rounded-lg border border-gray-300 px-3 py-2 pl-9 focus:ring-2 focus:ring-blue-500 outline-none">
+          <div class="absolute left-2 top-2.5 text-gray-400 select-none">🔎</div>
+        </div>
+        <button id="btn-search" class="btn tap">搜尋</button>
+        <button id="btn-clear" class="btn tap">清除</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 主內容 -->
+  <main class="flex-1">
+    <div class="container-pad">
+      <div class="max-w-xl mx-auto py-4 space-y-3" id="cards"></div>
+      <div id="empty" class="hidden max-w-xl mx-auto py-16 text-center text-gray-500">
+        目前沒有資料，先用「新增一題」或「匯入（檔案）」載入 JSON。
+      </div>
+    </div>
+  </main>
+
+  <!-- 右下角：記一筆複習 -->
+  <button id="fab-review" class="fab tap" title="記一筆複習">＋</button>
+
+  <!-- 新增/編輯 Sheet（預留靈動島空間） -->
+  <div id="sheet" class="sheet">
+    <div class="sheet-card">
+      <div class="container-pad" style="padding-top:12px;padding-bottom:12px">
+        <div class="flex items-center justify-between">
+          <h2 id="sheet-title" class="text-lg font-extrabold">新增錯題</h2>
+          <div class="flex gap-2">
+            <button type="button" id="btn-close" class="btn tap">關閉</button>
+            <button type="button" id="btn-delete" class="btn tap hidden text-red-600 bg-red-50">刪除</button>
+          </div>
+        </div>
+      </div>
+      <div class="container-pad" style="padding-bottom:calc(env(safe-area-inset-bottom) + 14px)">
+        <form id="form" class="space-y-3">
+          <input type="hidden" id="form-id" />
+          <div>
+            <label class="text-sm text-gray-700">分類</label>
+            <select id="form-category" required class="w-full border rounded-lg px-3 py-2">
+              <option value="Grammar">文法 (Grammar)</option>
+              <option value="Collocations">片語 (Collocations)</option>
+              <option value="Vocabulary">單字 (Vocabulary)</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm text-gray-700">子分類（如：介系詞／時態）</label>
+            <input id="form-subcat" class="w-full border rounded-lg px-3 py-2" placeholder="介系詞 / 時態 / 詞性 …">
+          </div>
+          <div>
+            <label class="text-sm text-gray-700">題幹（含 (A)(B)(C)(D) 選項文字）</label>
+            <textarea id="form-question" required rows="3" class="w-full border rounded-lg px-3 py-2" placeholder="題目 + (A) ... (B) ... (C) ... (D) ..."></textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-sm text-gray-700">❌ 你的答案（或常見誤答）</label>
+              <input id="form-wrong" class="w-full border rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-gray-700">✅ 正確答案（文字，需與題幹其中一個選項一致）</label>
+              <input id="form-correct" class="w-full border rounded-lg px-3 py-2">
+            </div>
+          </div>
+          <div>
+            <label class="text-sm text-gray-700">🔎 錯因分析</label>
+            <textarea id="form-analysis" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+          </div>
+          <div>
+            <label class="text-sm text-gray-700">🎯 記憶口訣/小技巧</label>
+            <textarea id="form-mnemonic" rows="2" class="w-full border rounded-lg px-3 py-2"></textarea>
+          </div>
+          <div>
+            <label class="text-sm text-gray-700">🧩 類題提醒（同觀念題型）</label>
+            <input id="form-related" class="w-full border rounded-lg px-3 py-2" placeholder="例：固定搭配 in/on；形容詞順序 …">
+          </div>
+          <div>
+            <label class="text-sm text-gray-700">📎 題目來源</label>
+            <input id="form-source" class="w-full border rounded-lg px-3 py-2" placeholder="書名 / 網站 / 試題年份 …">
+          </div>
+          <div>
+            <label class="text-sm text-gray-700">標籤（逗號分隔）</label>
+            <input id="form-tags" class="w-full border rounded-lg px-3 py-2" placeholder="介系詞, TOEIC, Part5">
+          </div>
+          <div class="text-right pt-2">
+            <button class="btn btn-blue tap" type="submit">儲存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast & Loading -->
+  <div id="toast" class="toast">提示</div>
+  <div id="loading"><div class="text-center">
+    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
+    <p class="text-gray-700">處理中…</p></div>
+  </div>
+
+<script>
+/* ============== 小工具 ============== */
+const $=s=>document.querySelector(s);
+const $$=s=>Array.from(document.querySelectorAll(s));
+const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
+const toast=(msg,dur=1400)=>{ const el=$("#toast"); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),dur); };
+const fmt=(ts)=>{ if(!ts) return '-'; const d=new Date(ts); const z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}/${z(d.getMonth()+1)}/${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`; };
+
+/* ============== 狀態 ============== */
+const LS_KEY='eng_error_cards_v6';
+const state={ cat:null, mode:'list', data:[], filtered:[], quizIndex:0, lastAnsweredId:null };
+
+/* ============== 匯入/匯出（支援中文欄位） ============== */
+function normalizeCategory(v){
+  if(!v) return 'Grammar';
+  if(/文法|grammar/i.test(v)) return 'Grammar';
+  if(/片語|colloc/i.test(v)) return 'Collocations';
+  if(/單字|vocab/i.test(v)) return 'Vocabulary';
+  return 'Grammar';
+}
+function parseImportArray(arr){
+  return arr.map(o=>{
+    const id=uid();
+    const category = normalizeCategory(o['分類']||o.category);
+    const subCategory = o['子分類']||o.subCategory||'';
+    const question = o['題幹']||o.question||'';
+    const wrongAnswer = o['你的答案']||o['錯誤答案']||o.wrongAnswer||'';
+    const correctAnswer = o['正確答案']||o.correctAnswer||'';
+    const analysis = o['錯因分析']||o.analysis||'';
+    const mnemonic = o['記憶口訣']||o.mnemonic||'';
+    const relatedHint = o['類題提醒']||o.relatedHint||'';
+    const source = o['題目來源']||o.source||'';
+    const tags = (o['標籤']||o.tags||'').toString().split(/[,，]/).map(s=>s.trim()).filter(Boolean);
+    const reviewHistory = Array.isArray(o.reviewHistory)?o.reviewHistory:[];
+    const isReviewed = !!o.isReviewed;
+    const failCount = Number(o.failCount||0);
+    const createdAt = o.createdAt || Date.now();
+    return { id, category, subCategory, question, wrongAnswer, correctAnswer,
+      analysis, mnemonic, relatedHint, source, tags,
+      createdAt, isReviewed, reviewHistory, failCount, options:[], extra:o };
+  });
+}
+function loadLocal(){ try{ state.data=JSON.parse(localStorage.getItem(LS_KEY)||'[]'); }catch{ state.data=[]; } }
+function saveLocal(){ localStorage.setItem(LS_KEY, JSON.stringify(state.data)); }
+
+$("#file-import").onchange=(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const json=JSON.parse(r.result);
+      if(!Array.isArray(json)) throw new Error('匯入檔不是陣列');
+      const parsed=parseImportArray(json);
+      const key=o=>(o.question||'')+'|'+(o.correctAnswer||'');
+      const map=new Map(state.data.map(o=>[key(o),o]));
+      parsed.forEach(o=>map.set(key(o),o));
+      state.data=Array.from(map.values()).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+      saveLocal(); render(); toast(`✅ 匯入成功，共 ${parsed.length} 筆`);
+    }catch(err){ console.error(err); toast('❌ 匯入失敗：格式錯誤或內容無法解析'); }
+  };
+  r.readAsText(f); e.target.value='';
+};
+$("#btn-export-file").onclick=()=>{
+  const data=JSON.stringify(state.data,null,2);
+  const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+  const a=Object.assign(document.createElement('a'),{href:url,download:`english-mistakes-${Date.now()}.json`});
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),500);
+  toast('已匯出（本機檔案）');
+};
+
+/* ============== 題幹選項抽取 ============== */
+function extractOptionsFromStem(stem){
+  // 取得 (A)(B)(C)(D) 之後的文字
+  const reg=/\([A-D]\)\s*([^()]+?)(?=\s*\([A-D]\)\s*|$)/g;
+  const opts=[]; let m;
+  while((m=reg.exec(stem))!==null){ opts.push(m[1].trim()); }
+  // 保底：若不足四個，用空字串補
+  while(opts.length<4) opts.push('');
+  return opts.slice(0,4);
+}
+function randomizeOptions(textOptions, correctText){
+  // 依文字配對找出正解索引；若找不到就第0個
+  let cIdx = Math.max(0, textOptions.findIndex(t=>t.toLowerCase()===String(correctText||'').trim().toLowerCase()));
+  const letters=['A','B','C','D'];
+  const idxs=[0,1,2,3].sort(()=>Math.random()-.5); // 洗牌
+  const letterToText = {};
+  idxs.forEach((orig,i)=>{ letterToText[letters[i]]=textOptions[orig]; if(orig===cIdx) cIdx=i; });
+  return { letterToText, correctLetter: letters[cIdx] };
+}
+
+/* ============== 篩選 / 排序 / 標籤 ============== */
+function setActive(btn,active){ btn.classList.toggle('btn-active',!!active); }
+function renderTabs(){
+  setActive($("#tab-all"), state.cat===null);
+  setActive($("#tab-grammar"), state.cat==='Grammar');
+  setActive($("#tab-collocations"), state.cat==='Collocations');
+  setActive($("#tab-vocab"), state.cat==='Vocabulary');
+}
+function computeFiltered(){
+  const q=$("#search").value.trim().toLowerCase();
+  let arr=state.data.slice();
+  if(state.cat) arr=arr.filter(d=>d.category===state.cat); // 依類別
+  if(q){
+    arr=arr.filter(d=>{
+      const blob=[d.question,d.wrongAnswer,d.correctAnswer,d.analysis,d.mnemonic,d.relatedHint,d.source,(d.tags||[]).join(','),d.subCategory].join(' ').toLowerCase();
+      return blob.includes(q);
+    });
+  }
+  if(state.mode==='quiz'){
+    // 測驗題庫來源：未複習優先，再來很久沒複習
+    arr.sort((a,b)=>{
+      const sa = a.reviewHistory?.[a.reviewHistory.length-1] || 0;
+      const sb = b.reviewHistory?.[b.reviewHistory.length-1] || 0;
+      const aKey = (a.reviewHistory?.length?1:0), bKey=(b.reviewHistory?.length?1:0);
+      if(aKey!==bKey) return aKey-bKey; // 未複習(0) 先
+      return sa - sb; // 最久未複習先
+    });
+  }else{
+    arr.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  }
+  state.filtered=arr;
+  if(state.mode==='quiz') state.quizIndex=0;
+}
+
+/* ============== UI 卡片 ============== */
+function reviewMeta(it){
+  const n=it.reviewHistory?.length||0;
+  const last=it.reviewHistory?.[n-1]||0;
+  return n?`<span class="pill bg-emerald-50 text-emerald-700 ml-2">複習 ${n} 次・上次 ${fmt(last)}</span>`:'';
+}
+function cardEl(it, idxForQuiz=null){
+  const el=document.createElement('div'); el.className='card tap';
+  const categoryMap={'Grammar':'📝 文法','Collocations':'🔗 片語','Vocabulary':'💡 單字'};
+  const created=new Date(it.createdAt||Date.now()).toLocaleDateString('zh-TW');
+
+  // 抽出題幹中的文字選項並隨機配給
+  const textOptions = extractOptionsFromStem(it.question||'');
+  const mapping = randomizeOptions(textOptions, it.correctAnswer);
+  const correctLetter = mapping.correctLetter;
+
+  const baseTop = `
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-sm font-semibold text-blue-700">
+        ${categoryMap[it.category]||'📄'}
+        ${it.subCategory?`<span class="pill bg-blue-50 text-blue-700 ml-2">${escapeHTML(it.subCategory)}</span>`:''}
+        ${reviewMeta(it)}
+      </div>
+      <div class="text-xs text-gray-400">${created}
+        <span class="pill bg-red-100 text-red-600 ml-2 js-fails">錯 ${it.failCount||0} 次</span>
+      </div>
+    </div>
+    <h3 class="font-bold text-gray-900 mb-2">${escapeHTML(it.question||'')}</h3>
+    <div class="flex flex-wrap gap-1 mb-2">${(it.tags||[]).map(t=>`<span class="pill bg-gray-100 text-gray-600">#${escapeHTML(t)}</span>`).join('')}</div>
+  `;
+
+  if(state.mode==='quiz'){
+    el.innerHTML = baseTop + `
+      <div class="space-y-2" data-quiz="${it.id}">
+        ${['A','B','C','D'].map(letter => `<button class="opt" data-letter="${letter}"><b>${letter}</b></button>`).join('')}
+      </div>
+      <div class="mt-3 hidden" id="qa-${it.id}">
+        <div class="p-2 bg-green-50 border border-green-200 rounded-lg text-sm">
+          <b class="text-green-700">✅ 正解</b>：${correctLetter}
+        </div>
+        ${it.analysis?`<div class="mt-2 p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg text-sm"><div class="font-semibold text-yellow-800 mb-1">🔎 錯因分析</div><div class="text-gray-800">${escapeHTML(it.analysis)}</div></div>`:''}
+        ${it.mnemonic?`<div class="mt-2 p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-lg text-sm"><div class="font-semibold text-indigo-800 mb-1">🎯 記憶口訣</div><div class="text-gray-800">${escapeHTML(it.mnemonic)}</div></div>`:''}
+        ${it.relatedHint?`<div class="mt-2 p-3 bg-sky-50 border-l-4 border-sky-500 rounded-r-lg text-sm"><div class="font-semibold text-sky-800 mb-1">🧩 類題提醒</div><div class="text-gray-800">${escapeHTML(it.relatedHint)}</div></div>`:''}
+        ${it.source?`<div class="mt-2 text-xs text-slate-500">📎 題目來源：${escapeHTML(it.source)}</div>`:''}
+        <div class="mt-3 text-right">
+          <button class="btn btn-blue tap js-next">下一題</button>
+        </div>
+      </div>
+    `;
+  } else {
+    el.innerHTML = baseTop + `
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <div class="p-2 bg-red-50 border border-red-200 rounded-lg"><b class="text-red-600">❌</b> ${escapeHTML(it.wrongAnswer||'')}</div>
+        <div class="p-2 bg-green-50 border border-green-200 rounded-lg"><b class="text-green-600">✅</b> ${escapeHTML(it.correctAnswer||'')}</div>
+      </div>
+      ${it.analysis?`<div class="mt-2 p-3 bg-yellow-50 border-l-4 border-yellow-500 rounded-r-lg text-sm"><div class="font-semibold text-yellow-800 mb-1">🔎 錯因分析</div><div class="text-gray-800">${escapeHTML(it.analysis)}</div></div>`:''}
+      ${it.mnemonic?`<div class="mt-2 p-3 bg-indigo-50 border-l-4 border-indigo-500 rounded-r-lg text-sm"><div class="font-semibold text-indigo-800 mb-1">🎯 記憶口訣</div><div class="text-gray-800">${escapeHTML(it.mnemonic)}</div></div>`:''}
+      ${it.relatedHint?`<div class="mt-2 p-3 bg-sky-50 border-l-4 border-sky-500 rounded-r-lg text-sm"><div class="font-semibold text-sky-800 mb-1">🧩 類題提醒</div><div class="text-gray-800">${escapeHTML(it.relatedHint)}</div></div>`:''}
+      ${it.source?`<div class="mt-2 text-xs text-slate-500">📎 題目來源：${escapeHTML(it.source)}</div>`:''}
+      <div class="flex justify-end gap-2 mt-3">
+        <button class="btn text-sm js-edit tap">編輯</button>
+        <button class="btn text-sm text-red-600 js-del tap">刪除</button>
+        <button class="btn text-sm ${it.isReviewed?'btn-active':''} js-review tap">${it.isReviewed?'✅ 已複習':'🔄 標記已複習'}</button>
+      </div>
+    `;
+  }
+
+  // 測驗互動
+  if(state.mode==='quiz'){
+    const box=el.querySelector(`[data-quiz="${it.id}"]`);
+    const qaPanel = el.querySelector(`#qa-${it.id}`);
+    let answered=false;
+
+    const judge=(letter)=>{
+      if(answered) return;
+      answered=true;
+      state.lastAnsweredId = it.id;
+      box.querySelectorAll('.opt').forEach(o=>o.classList.remove('active','correct','wrong'));
+      const clicked = box.querySelector(`[data-letter="${letter}"]`);
+      clicked.classList.add('active');
+      const ok = (letter===correctLetter);
+      if(ok){ clicked.classList.add('correct'); changeFailCount(it.id,-1,el); toast('答對了！❤️ -1'); }
+      else { clicked.classList.add('wrong'); changeFailCount(it.id,+1,el); toast('答錯了，+1'); }
+      // 標記已複習 + 紀錄時間
+      addReview(it.id, true);
+      qaPanel.classList.remove('hidden');
+    };
+
+    box?.querySelectorAll('.opt').forEach(opt=>{
+      opt.addEventListener('click',()=>judge(opt.getAttribute('data-letter')));
+    });
+
+    qaPanel?.querySelector('.js-next')?.addEventListener('click',()=>{
+      state.quizIndex = Math.min(state.filtered.length-1, (state.quizIndex||0)+1);
+      scrollToCardIndex(state.quizIndex);
+    });
+  } else {
+    // 一般模式的互動
+    el.querySelector('.js-edit')?.addEventListener('click',()=>openSheet(it));
+    el.querySelector('.js-del')?.addEventListener('click',()=>delItem(it.id));
+    el.querySelector('.js-review')?.addEventListener('click',()=>{ addReview(it.id,true); render(); });
+  }
+  return el;
+}
+
+function scrollToCardIndex(i){
+  const cards=$$('#cards > .card');
+  if(cards[i]) cards[i].scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function render(){
+  renderTabs(); computeFiltered();
+  const host=$("#cards"); host.innerHTML='';
+  if(state.filtered.length===0) $("#empty").classList.remove('hidden');
+  else {
+    $("#empty").classList.add('hidden');
+    const startIndex = (state.mode==='quiz') ? state.quizIndex : 0;
+    state.filtered.slice(startIndex).forEach(it=>host.appendChild(cardEl(it)));
+  }
+}
+
+/* ============== 統計與複習紀錄 ============== */
+function changeFailCount(id,delta,elCard){
+  const it=state.data.find(d=>d.id===id); if(!it) return;
+  it.failCount=Math.max(0,(it.failCount||0)+delta);
+  saveLocal();
+  const span=elCard?.querySelector('.js-fails');
+  if(span) span.textContent = `錯 ${it.failCount} 次`;
+}
+function addReview(id, silent=false){
+  const it=state.data.find(d=>d.id===id); if(!it) return;
+  it.isReviewed=true;
+  it.reviewHistory = Array.isArray(it.reviewHistory)?it.reviewHistory:[];
+  it.reviewHistory.push(Date.now());
+  saveLocal();
+  if(!silent) toast('已記錄複習一次');
+}
+
+/* ============== CRUD ============== */
+function upsertLocal(obj){
+  const idx=state.data.findIndex(d=>d.id===obj.id);
+  if(idx>=0) state.data[idx]=obj; else state.data.unshift(obj);
+  saveLocal(); render(); toast('已儲存');
+}
+function delItem(id){
+  if(!confirm('確定刪除這張卡片？')) return;
+  const idx=state.data.findIndex(d=>d.id===id);
+  if(idx>=0){ state.data.splice(idx,1); saveLocal(); render(); toast('已刪除'); }
+}
+
+/* ============== 新增/編輯 Sheet ============== */
+function openSheet(it=null){
+  $("#sheet").classList.add('show');
+  $("#sheet-title").textContent = it?'編輯錯題':'新增錯題';
+  $("#btn-delete").classList.toggle('hidden',!it);
+  $("#form-id").value = it?.id || '';
+  $("#form-category").value = it?.category || (state.cat || 'Grammar');
+  $("#form-subcat").value = it?.subCategory || '';
+  $("#form-question").value = it?.question || '';
+  $("#form-wrong").value = it?.wrongAnswer || '';
+  $("#form-correct").value = it?.correctAnswer || '';
+  $("#form-analysis").value = it?.analysis || '';
+  $("#form-mnemonic").value = it?.mnemonic || '';
+  $("#form-related").value = it?.relatedHint || '';
+  $("#form-source").value = it?.source || '';
+  $("#form-tags").value = (it?.tags||[]).join(', ');
+}
+function closeSheet(){ $("#sheet").classList.remove('show'); }
+$("#btn-close").onclick=closeSheet;
+$("#btn-delete").onclick=()=>{ const id=$("#form-id").value; if(id){ closeSheet(); delItem(id); } };
+$("#form").onsubmit=(e)=>{
+  e.preventDefault();
+  const id=$("#form-id").value || uid();
+  const existed=state.data.find(d=>d.id===id);
+  const obj={
+    id,
+    category:$("#form-category").value,
+    subCategory:$("#form-subcat").value.trim(),
+    question:$("#form-question").value.trim(),
+    wrongAnswer:$("#form-wrong").value.trim(),
+    correctAnswer:$("#form-correct").value.trim(),
+    analysis:$("#form-analysis").value.trim(),
+    mnemonic:$("#form-mnemonic").value.trim(),
+    relatedHint:$("#form-related").value.trim(),
+    source:$("#form-source").value.trim(),
+    tags:$("#form-tags").value.split(',').map(s=>s.trim()).filter(Boolean),
+    options:[], // 自動抽題用不到
+    createdAt: existed?.createdAt || Date.now(),
+    isReviewed: existed?.isReviewed || false,
+    reviewHistory: existed?.reviewHistory || [],
+    failCount: existed?.failCount || 0
+  };
+  upsertLocal(obj); closeSheet();
+};
+
+/* ============== 分類/模式/搜尋 ============== */
+function setGroupActive(btns,activeBtn){ btns.forEach(b=>b && b.classList.toggle('btn-active', b===activeBtn)); }
+
+$("#tab-all").onclick=()=>{ state.cat=null; render(); };
+$("#tab-grammar").onclick=()=>{ state.cat='Grammar'; render(); };
+$("#tab-collocations").onclick=()=>{ state.cat='Collocations'; render(); };
+$("#tab-vocab").onclick=()=>{ state.cat='Vocabulary'; render(); };
+
+$("#mode-list").onclick=()=>{ state.mode='list'; setGroupActive([$("#mode-list"),$("#mode-quiz")],$("#mode-list")); render(); };
+$("#mode-quiz").onclick=()=>{ state.mode='quiz'; setGroupActive([$("#mode-list"),$("#mode-quiz")],$("#mode-quiz")); render(); };
+
+$("#btn-search").onclick=()=>render();
+$("#btn-clear").onclick=()=>{ $("#search").value=''; render(); };
+$("#search").addEventListener('input',()=>render());
+
+$("#btn-add-top").onclick=()=>openSheet();
+
+// 右下角「＋ 記一筆複習」
+$("#fab-review").onclick=()=>{
+  if(state.mode==='quiz'){
+    const id = state.lastAnsweredId || (state.filtered[state.quizIndex]?.id);
+    if(!id){ toast('請先作答一題'); return; }
+    addReview(id); render();
+  }else{
+    // 非測驗時：對畫面第一張卡片加一筆（簡化）
+    const first=state.filtered[0];
+    if(!first){ toast('目前沒有卡片'); return; }
+    addReview(first.id); render();
+  }
+};
+
+/* ============== Google Drive（登入/備份/還原） ============== */
+const GOOGLE_CLIENT_ID='1067450972173-l1o4o3fl73f57mcm4rltj520h2ocio12.apps.googleusercontent.com'; // ← 換成你的
+const SCOPES='https://www.googleapis.com/auth/drive.appdata';
+let tokenClient=null, accessToken=null, driveFileId=null;
+
+function updateDriveStatus(isLogin){
+  $("#drive-status").innerHTML = isLogin ? '✅ 已登入 Google' : '離線模式（尚未登入）';
+  $("#btn-auth").textContent = isLogin ? '登出' : 'Google 登入';
+  $("#btn-auth").onclick = isLogin ? signOut : authorize;
+}
+async function ensureGapi(){
+  return new Promise(resolve=>{ gapi.load('client', async()=>{
+    await gapi.client.init({ discoveryDocs:['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
+    resolve();
+  }); });
+}
+function ensureGis(){
+  if(tokenClient) return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id:GOOGLE_CLIENT_ID, scope:SCOPES,
+    callback:(resp)=>{
+      if(resp && resp.error){
+        console.error('GIS error:', resp);
+        alert('Google 登入失敗：' + (resp.error_description || resp.error));
+        updateDriveStatus(false);
+        return;
+      }
+      if(resp && resp.access_token){
+        accessToken=resp.access_token;
+        try{ gapi.client.setToken({access_token}); }catch{}
+        updateDriveStatus(true);
+        findBackupFile();
+      }
+    }
+  });
+}
+async function authorize(){
+  if(typeof gapi==='undefined' || typeof google==='undefined'){
+    toast('Google 服務載入中…'); return;
+  }
+  await ensureGapi(); ensureGis();
+  setTimeout(()=>tokenClient.requestAccessToken({prompt:'consent'}),0);
+}
+function signOut(){
+  if(!accessToken) return;
+  google.accounts.oauth2.revoke(accessToken,()=>{});
+  accessToken=null; driveFileId=null;
+  if(typeof gapi!=='undefined'){ try{ gapi.client.setToken(null); }catch{} }
+  updateDriveStatus(false);
+}
+async function findBackupFile(){
+  try{
+    const resp=await gapi.client.drive.files.list({ spaces:'appDataFolder', q:"name='english_mistakes_v2.json'", fields:'files(id, modifiedTime)' });
+    driveFileId=(resp.result.files && resp.result.files[0]?.id) || null;
+  }catch(e){ console.warn('列出備份失敗',e); }
+}
+$("#btn-backup").onclick=async()=>{
+  if(!accessToken){ alert('請先 Google 登入'); return; }
+  $("#loading").classList.add('show');
+  try{
+    const data=JSON.stringify(state.data||[],null,2);
+    if(driveFileId){
+      await gapi.client.request({ path:`/upload/drive/v3/files/${driveFileId}`, method:'PATCH', params:{uploadType:'media'}, headers:{'Content-Type':'application/json'}, body:data });
+    }else{
+      const meta={ name:'english_mistakes_v2.json', parents:['appDataFolder'] };
+      const boundary='m_'+Math.random().toString(36).slice(2);
+      const body=`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${data}\r\n--${boundary}--`;
+      const res=await gapi.client.request({ path:'/upload/drive/v3/files?uploadType=multipart', method:'POST', headers:{'Content-Type':`multipart/related; boundary=${boundary}`}, body });
+      driveFileId=res.result.id;
+    }
+    alert('✅ 備份成功');
+  }catch(e){ console.error(e); alert('備份失敗：請確認 Drive API 與 Authorized JavaScript origins 設定'); }
+  finally{ $("#loading").classList.remove('show'); }
+};
+$("#btn-restore").onclick=async()=>{
+  if(!accessToken){ alert('請先 Google 登入'); return; }
+  if(!driveFileId){ await findBackupFile(); }
+  if(!driveFileId){ alert('雲端尚無備份，請先備份一次'); return; }
+  $("#loading").classList.add('show');
+  try{
+    const res=await gapi.client.drive.files.get({ fileId:driveFileId, alt:'media' });
+    const arr=Array.isArray(res.result)?res.result:[];
+    state.data=(arr||[]).map(o=>({...o, options:Array.isArray(o.options)?o.options:[]}));
+    saveLocal(); render(); alert('✅ 還原成功');
+  }catch(e){ console.error(e); alert('還原失敗：請檢查權限或網路'); }
+  finally{ $("#loading").classList.remove('show'); }
+};
+
+/* ============== 啟動：靜默回補 + 每秒檢查 token ============== */
+function hasLogin(){
+  try{
+    const t = (gapi.client && gapi.client.getToken) ? gapi.client.getToken() : null;
+    return !!(accessToken || (t && t.access_token));
+  }catch{ return !!accessToken; }
+}
+loadLocal(); render(); updateDriveStatus(false);
+window.addEventListener('load', async ()=>{
+  if(typeof gapi!=='undefined'){ await ensureGapi(); }
+  if(typeof google!=='undefined'){ ensureGis(); try{ tokenClient?.requestAccessToken({prompt:''}); }catch{} }
+});
+setInterval(()=>{ updateDriveStatus(hasLogin()); },1000);
+
+/* ============== 其他小工具 ============== */
+function escapeHTML(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;' }[m])); }
+</script>
+</body>
+</html>
